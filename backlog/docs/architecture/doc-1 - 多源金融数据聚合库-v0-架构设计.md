@@ -3,7 +3,7 @@ id: doc-1
 title: 多源金融数据聚合库 v0 架构设计
 type: specification
 created_date: '2026-09-12 10:51'
-updated_date: '2026-09-12 11:43'
+updated_date: '2026-09-12 12:49'
 ---
 # 架构设计：多源金融数据聚合库 v0
 
@@ -95,7 +95,7 @@ class DataHub:
 - 能力边界（capability 元数据，驱动分块/合并）：
   - Wind：行情/K 线类 `windcode` 支持逗号批量（单次 ≤50）；EDB `get_economic_data` 支持精确代码逗号批量，**优先于旧 `query` 类接口（单位成本显著更高）**；`get_bond_market_data` 单次约 100 行截断，长区间按 ≤90 天分块（用中文日期）。
   - iFinD：全部为 NL 调用，**多主体/多指标/多期尽量合并为一次 query**；EDB 一次只能一个指标（时间范围可合并）；指数/ETF/股票多标的聚合有效。
-- 配额与计量：每源调用计数器（按次/按积分），记录 `{source, endpoint, codes, latency, est_cost}`；预算阈值可配置并告警；`hub.stats()` 暴露。
+- 配额与计量：每源调用计数器（按次/按积分），记录 `{source, endpoint, codes, latency, est_cost}`；预算阈值可配置并告警；`hub.stats()` 暴露。**台账仅进程内内存（不落盘）**；跨进程汇总由调用方通过 `on_record` 回调写入自有存储/指标体系；预算语义为进程内预算，共享额度需外部原子计数器（本库不内置）。
 - 计价提示：各接口单位成本不同（`query` 类显著高于 `get` 类；按次计费源 1 次 = 1 额度）。适配器声明 `cost_hint`，为后续路由/降级预留。
 - 缓存即省钱：付费源默认 TTL 6h，`force` 慎用。
 - v0 只要求显式 `source`；上述合并与计量在单源内部生效。指标级"主源→备源→兜底"路由见 §10 待确认项。

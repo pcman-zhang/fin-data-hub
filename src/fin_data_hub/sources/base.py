@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Sequence
 from typing import ClassVar
 
 import pandas as pd
 
 from fin_data_hub.codes import SecCode
 from fin_data_hub.enums import Source
+from fin_data_hub.usage import UsageLedger
 
 
 class BaseAdapter(ABC):
@@ -22,12 +24,36 @@ class BaseAdapter(ABC):
     source: ClassVar[Source]
     capabilities: ClassVar[frozenset[str]] = frozenset()
 
+    _usage: UsageLedger | None = None
+
     # 能力名常量，供 facade 与测试引用
     CAP_BARS = "bars"
     CAP_SNAPSHOT = "snapshot"
     CAP_FUND_NAV = "fund_nav"
     CAP_REFERENCE = "reference"
     CAP_TRADE_CALENDAR = "trade_calendar"
+
+    def bind_usage(self, ledger: UsageLedger) -> None:
+        """由门面注入调用台账；适配器在真实调用边界记录。"""
+        self._usage = ledger
+
+    def _record(
+        self,
+        endpoint: str,
+        *,
+        calls: int = 1,
+        codes: Sequence[str] = (),
+        latency_ms: float = 0.0,
+    ) -> None:
+        ledger = getattr(self, "_usage", None)
+        if ledger is not None:
+            ledger.record(
+                str(self.source),
+                endpoint,
+                calls=calls,
+                codes=tuple(codes),
+                latency_ms=latency_ms,
+            )
 
     def fetch_bars(
         self,

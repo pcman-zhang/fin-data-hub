@@ -25,6 +25,7 @@ from fin_data_hub.errors import (
 )
 from fin_data_hub.facade import DataHub
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
+from fin_data_hub.usage import BudgetAlert, BudgetConfig, UsageLedger, UsageRecord
 
 __all__ = [
     "__version__",
@@ -42,6 +43,10 @@ __all__ = [
     "MemoryCache",
     "BaseAdapter",
     "SourceRegistry",
+    "BudgetConfig",
+    "BudgetAlert",
+    "UsageLedger",
+    "UsageRecord",
     "FinDataHubError",
     "MissingCredentialError",
     "NetworkError",

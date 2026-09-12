@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pandas as pd
@@ -241,10 +242,13 @@ class TushareAdapter(BaseAdapter):
         fn = getattr(self._api, endpoint, None)
         if fn is None:
             raise SourceError(f"Tushare API 缺少接口 {endpoint!r}")
+        start = time.monotonic()
         try:
             result = fn(**kwargs)
         except Exception as exc:  # noqa: BLE001 - 统一映射源端异常
             raise SourceError(f"Tushare {endpoint} 调用失败: {exc}") from exc
+        finally:
+            self._record(endpoint, latency_ms=(time.monotonic() - start) * 1000)
         if result is None:
             return pd.DataFrame()
         return pd.DataFrame(result)

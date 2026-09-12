@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from fin_data_hub.enums import Source
+from fin_data_hub.usage import BudgetConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,4 +49,5 @@ class HubConfig:
     ifind: IfindConfig | None = None
     akshare: AkShareConfig = field(default_factory=AkShareConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
+    budget: BudgetConfig = field(default_factory=BudgetConfig)
     default_source: Source | None = None

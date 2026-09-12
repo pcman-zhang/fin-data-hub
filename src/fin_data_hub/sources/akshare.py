@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pandas as pd
@@ -178,10 +179,13 @@ class AkShareAdapter(BaseAdapter):
         fn = getattr(self._ak, name, None)
         if fn is None:
             raise SourceError(f"AkShare 缺少接口 {name!r}")
+        start = time.monotonic()
         try:
             result = fn(**kwargs)
         except Exception as exc:  # noqa: BLE001 - 统一映射源端异常
             raise SourceError(f"AkShare {name} 调用失败: {exc}") from exc
+        finally:
+            self._record(name, latency_ms=(time.monotonic() - start) * 1000)
         if result is None:
             return pd.DataFrame()
         return pd.DataFrame(result)

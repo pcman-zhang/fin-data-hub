@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "fin-data-hub"
 description = "多源金融数据聚合库：统一接口获取 Tushare / Wind / 同花顺 iFinD / AkShare 数据"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dynamic = ["version"]
 dependencies = [
     "pandas>=3.0,<4",
@@ -30,9 +32,9 @@ fin_data_hub = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m 'not integration'"
 markers = [
-    "integration: 需要真实凭证与外网的集成测试（默认跳过）",
+    "integration: 需要真实凭证与外网的集成测试（默认跳过；用 pytest -m integration 运行）",
 ]
 
 [tool.ruff]

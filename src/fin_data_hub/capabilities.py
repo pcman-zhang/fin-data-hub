@@ -50,15 +50,16 @@ CAPABILITIES: dict[tuple[Source, str], EndpointCapability] = {
     (Source.AKSHARE, "fund_nav"): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
     ),
-    # iFinD：NL 聚合支持多标的；EDB 一次仅一个指标
+    # iFinD：NL 工具普遍支持多标的/多指标聚合（已抽验 stock/fund/edb）；
+    # max_codes_per_call=50 是请求体积的安全上限，非接口限制
     (Source.IFIND, "bars"): EndpointCapability(
-        max_codes_per_call=50, cost_class="metered"
+        max_codes_per_call=50, supports_multi_symbol=True, cost_class="metered"
     ),
     (Source.IFIND, "fund_nav"): EndpointCapability(
-        max_codes_per_call=50, cost_class="metered"
+        max_codes_per_call=50, supports_multi_symbol=True, cost_class="metered"
     ),
     (Source.IFIND, "edb"): EndpointCapability(
-        max_indicators_per_call=1, cost_class="metered"
+        max_indicators_per_call=None, supports_multi_symbol=True, cost_class="metered"
     ),
     # Wind：K 线单代码；快照单次 ≤50；EDB 精确代码可批量
     (Source.WIND, "bars"): EndpointCapability(

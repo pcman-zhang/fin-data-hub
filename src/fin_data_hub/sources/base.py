@@ -10,6 +10,7 @@ import pandas as pd
 
 from fin_data_hub.codes import SecCode
 from fin_data_hub.enums import Source
+from fin_data_hub.ratelimit import RateLimiterSet
 from fin_data_hub.usage import UsageLedger
 
 
@@ -25,6 +26,16 @@ class BaseAdapter(ABC):
     capabilities: ClassVar[frozenset[str]] = frozenset()
 
     _usage: UsageLedger | None = None
+    _rate_limits: RateLimiterSet | None = None
+
+    def bind_rate_limits(self, limiter: RateLimiterSet) -> None:
+        """由门面注入限流器；适配器在真实调用前 acquire。"""
+        self._rate_limits = limiter
+
+    def _acquire(self, endpoint: str) -> None:
+        limiter = getattr(self, "_rate_limits", None)
+        if limiter is not None:
+            limiter.acquire(endpoint)
 
     # 能力名常量，供 facade 与测试引用
     CAP_BARS = "bars"

@@ -1,9 +1,13 @@
 """iFinD（同花顺）MCP 适配器。
 
+设计约定：iFinD 的 NL 工具**默认按可聚合处理**（多标的/多指标/多期尽量合并为
+一次 query；已抽验 stock/fund/edb），适配器不逐标的拆分；仅结构化高频接口与
+请求体积安全上限（50）除外。
+
 v0 覆盖：
 - ``fund_nav``：``get_fund_market_performance``（NL 聚合，一次请求多只基金）；
 - ``bars``：``index_data``（仅指数；股票/基金 K 线暂不支持）；
-- ``fetch_edb_series``：``get_edb_data``（**一次仅一个指标**，时间范围可合并）。
+- ``fetch_edb_series``：``get_edb_data``（支持多指标聚合，实测确认）。
 
 NL 响应为 markdown 文本表，解析见 :mod:`fin_data_hub.mcp.parsers`。
 """
@@ -28,6 +32,7 @@ from fin_data_hub.errors import (
 )
 from fin_data_hub.mcp import McpHttpClient, McpServerConfig, unwrap_content
 from fin_data_hub.mcp.parsers import find_table, parse_markdown_tables, split_unit
+from fin_data_hub.ratelimit import default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
 
 IFIND_BASE_URL = "https://api-mcp.51ifind.com:8643/ds-mcp-servers"
@@ -84,6 +89,7 @@ class IfindAdapter(BaseAdapter):
         self._config = config or IfindConfig()
         self._clients: dict[str, Any] = dict(clients or {})
         self._owns_clients = clients is None
+        self._rate_limits = default_rate_limiter_set(self.source)
 
     def close(self) -> None:
         if not self._owns_clients:
@@ -189,18 +195,17 @@ class IfindAdapter(BaseAdapter):
     def fetch_edb_series(
         self, indicators: Sequence[str], *, start: str, end: str
     ) -> pd.DataFrame:
-        """查询单个 EDB 指标（iFinD 限制：一次一个，时间范围可合并）。"""
-        if len(indicators) != 1:
-            raise ValueError(
-                f"iFinD EDB 一次只能查询一个指标，收到 {len(indicators)} 个"
-                "（时间范围可合并，指标不可合并）"
-            )
-        indicator = str(indicators[0]).strip()
-        if not indicator:
-            raise ValueError("indicator 不能为空")
-        query = f"{indicator}（{start.strip()} - {end.strip()}）"
+        """查询 EDB 指标时间序列。
+
+        实测 ``get_edb_data`` 支持**多指标聚合**（一次查询返回多指标宽表），
+        因此本方法不拆分指标；时间范围由 ``start``/``end`` 合并传入。
+        """
+        names = [str(item).strip() for item in indicators if str(item).strip()]
+        if not names:
+            raise ValueError("indicators 不能为空")
+        query = f"{'、'.join(names)}（{start.strip()} - {end.strip()}）"
         data = self._call_service("edb", "get_edb_data", {"query": query})
-        return _edb_frame(data, indicator)
+        return _edb_frame(data)
 
     # ------------------------------------------------------------------ 内部
     def _client(self, service: str) -> Any:
@@ -227,6 +232,7 @@ class IfindAdapter(BaseAdapter):
 
     def _call_service(self, service: str, tool: str, arguments: dict) -> Any:
         client = self._client(service)
+        self._acquire(tool)
         start = time.monotonic()
         try:
             result = client.call_tool(tool, arguments)
@@ -284,40 +290,103 @@ def _canonicalize(series: pd.Series) -> pd.Series:
     return series.map(convert)
 
 
-def _edb_frame(data: Any, indicator: str) -> pd.DataFrame:
-    datas = data.get("datas") if isinstance(data, dict) else None
-    if not datas:
-        raise ResponseParseError(f"iFinD EDB 响应缺少 datas: {str(data)[:200]}")
-    container = datas[0].get("data") if isinstance(datas[0], dict) else None
-    if not isinstance(container, dict):
-        raise ResponseParseError(f"iFinD EDB data 结构异常: {str(datas[0])[:200]}")
-    columns = container.get("columns")
-    rows = container.get("data")
-    if not columns or rows is None:
-        raise ResponseParseError(f"iFinD EDB 缺少 columns/data: {str(container)[:200]}")
-    frame = pd.DataFrame(rows, columns=columns)
+def _edb_frame(data: Any) -> pd.DataFrame:
+    """解析 EDB 响应为长表 ``indicator/obs_date/value``。
+
+    优先解析结构化 ``datas``（宽表：日期 + 各指标列，或含指标名称列的窄表），
+    缺失时回退解析 ``answer`` markdown 宽表。
+    """
+    if not isinstance(data, dict):
+        raise ResponseParseError(f"iFinD EDB 响应结构异常: {str(data)[:200]}")
+    frames = _edb_frames_from_datas(data)
+    if not frames:
+        frames = _edb_frames_from_answer(data)
+    if not frames:
+        raise ResponseParseError(f"iFinD EDB 无法解析（截断）: {str(data)[:200]}")
+    return (
+        pd.concat(frames, ignore_index=True)
+        .sort_values(["indicator", "obs_date"])
+        .reset_index(drop=True)
+    )
+
+
+def _edb_frames_from_datas(data: dict) -> list[pd.DataFrame]:
+    frames: list[pd.DataFrame] = []
+    for entry in data.get("datas") or []:
+        container = entry.get("data") if isinstance(entry, dict) else None
+        if not isinstance(container, dict):
+            continue
+        columns = container.get("columns")
+        rows = container.get("data")
+        if not columns or rows is None:
+            continue
+        frames.extend(_melt_edb(pd.DataFrame(rows, columns=columns)))
+    return frames
+
+
+def _edb_frames_from_answer(data: dict) -> list[pd.DataFrame]:
+    answer = data.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return []
+    frames: list[pd.DataFrame] = []
+    for table in parse_markdown_tables(answer):
+        frames.extend(_melt_edb(table))
+    return frames
+
+
+def _melt_edb(frame: pd.DataFrame) -> list[pd.DataFrame]:
     date_column = next(
         (c for c in frame.columns if "日期" in str(c) or "时间" in str(c)), None
     )
-    value_column = None
+    if date_column is None:
+        return []
+    indicator_column = next(
+        (c for c in frame.columns if "指标名称" in str(c) or str(c) == "指标"), None
+    )
+    if indicator_column is not None:
+        value_column = next(
+            (
+                c
+                for c in frame.columns
+                if c not in (date_column, indicator_column)
+                and pd.to_numeric(frame[c], errors="coerce").notna().all()
+            ),
+            None,
+        )
+        if value_column is None:
+            return []
+        return [
+            pd.DataFrame(
+                {
+                    "indicator": frame[indicator_column].astype(str),
+                    "obs_date": pd.to_datetime(frame[date_column]).astype(
+                        "datetime64[ns]"
+                    ),
+                    "value": pd.to_numeric(frame[value_column], errors="coerce"),
+                }
+            )
+        ]
+
+    frames: list[pd.DataFrame] = []
     for column in frame.columns:
-        if column == date_column or "指标" in str(column):
+        if column == date_column:
             continue
         numeric = pd.to_numeric(frame[column], errors="coerce")
-        if numeric.notna().all():
-            value_column = column
-            break
-    if date_column is None or value_column is None:
-        raise ResponseParseError(
-            f"iFinD EDB 无法识别日期/数值列: {list(frame.columns)}"
+        if numeric.notna().sum() == 0:
+            continue
+        name, _factor = split_unit(str(column))
+        frames.append(
+            pd.DataFrame(
+                {
+                    "indicator": name,
+                    "obs_date": pd.to_datetime(frame[date_column]).astype(
+                        "datetime64[ns]"
+                    ),
+                    "value": numeric,
+                }
+            )
         )
-    return pd.DataFrame(
-        {
-            "indicator": indicator,
-            "obs_date": pd.to_datetime(frame[date_column]).astype("datetime64[ns]"),
-            "value": pd.to_numeric(frame[value_column]),
-        }
-    ).sort_values("obs_date").reset_index(drop=True)
+    return frames
 
 
 def _empty_nav() -> pd.DataFrame:

@@ -19,6 +19,7 @@ from fin_data_hub.config import TushareConfig
 from fin_data_hub.enums import Source
 from fin_data_hub.errors import MissingCredentialError, SourceError, UnsupportedCapability
 from fin_data_hub.mapping import get_mapper
+from fin_data_hub.ratelimit import default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
 
 _LOT_TO_SHARE = 100
@@ -57,6 +58,7 @@ class TushareAdapter(BaseAdapter):
         api: Any | None = None,
     ) -> None:
         self._mapper = get_mapper(self.source)
+        self._rate_limits = default_rate_limiter_set(self.source)
         if api is not None:
             self._api = api
             return
@@ -242,6 +244,7 @@ class TushareAdapter(BaseAdapter):
         fn = getattr(self._api, endpoint, None)
         if fn is None:
             raise SourceError(f"Tushare API 缺少接口 {endpoint!r}")
+        self._acquire(endpoint)
         start = time.monotonic()
         try:
             result = fn(**kwargs)

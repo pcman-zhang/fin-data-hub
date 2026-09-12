@@ -47,6 +47,29 @@ EDB_DATA = {
     ]
 }
 
+# 实测多指标聚合响应（宽表）：answer markdown 与 datas 宽表并存
+EDB_MULTI_ANSWER = (
+    "|日期|DR007（单位：%）|R007（单位：%）|\n"
+    "|---|---|---|\n"
+    "|2026-09-11|1.4232|1.4193|\n"
+    "|2026-09-10|1.4113|1.4289|\n"
+)
+EDB_MULTI_DATA = {
+    "answer": EDB_MULTI_ANSWER,
+    "datas": [
+        {
+            "elapsed": 1.2,
+            "data": {
+                "data": [
+                    ["2026-09-11", 1.4232, 1.4193],
+                    ["2026-09-10", 1.4113, 1.4289],
+                ],
+                "columns": ["日期", "DR007（单位：%）", "R007（单位：%）"],
+            },
+        }
+    ],
+}
+
 
 class StubIfindClient:
     def __init__(self, data, *, as_string: bool = True) -> None:
@@ -215,11 +238,33 @@ def test_missing_credential_raises_on_use() -> None:
         adapter.fetch_fund_nav([SecCode.parse("000001.OF")], start=None, end=None)
 
 
-def test_edb_single_indicator_enforced() -> None:
-    stub = StubIfindClient(EDB_DATA, as_string=False)
+def test_edb_multi_indicator_single_call() -> None:
+    stub = StubIfindClient(EDB_MULTI_DATA, as_string=False)
     adapter = IfindAdapter(clients={"edb": stub})
-    with pytest.raises(ValueError, match="一个指标"):
-        adapter.fetch_edb_series(["A", "B"], start="20260101", end="20260228")
+    df = adapter.fetch_edb_series(["DR007", "R007"], start="20260901", end="20260911")
+    assert len(stub.calls) == 1  # 多指标聚合为一次调用
+    tool, arguments = stub.calls[0]
+    assert tool == "get_edb_data"
+    assert "DR007" in arguments["query"]
+    assert "R007" in arguments["query"]
+    assert set(df["indicator"]) == {"DR007", "R007"}
+    assert len(df) == 4
+    row = df[(df["indicator"] == "DR007") & (df["obs_date"] == "2026-09-11")].iloc[0]
+    assert row["value"] == pytest.approx(1.4232)
+
+
+def test_edb_parses_answer_when_datas_missing() -> None:
+    stub = StubIfindClient({"answer": EDB_MULTI_ANSWER}, as_string=False)
+    adapter = IfindAdapter(clients={"edb": stub})
+    df = adapter.fetch_edb_series(["DR007", "R007"], start="20260901", end="20260911")
+    assert set(df["indicator"]) == {"DR007", "R007"}
+    assert len(df) == 4
+
+
+def test_edb_empty_indicators_rejected() -> None:
+    adapter = IfindAdapter(clients={"edb": StubIfindClient(EDB_DATA, as_string=False)})
+    with pytest.raises(ValueError, match="不能为空"):
+        adapter.fetch_edb_series([], start="20260101", end="20260228")
 
 
 def test_edb_series_parsed() -> None:
@@ -227,6 +272,7 @@ def test_edb_series_parsed() -> None:
     adapter = IfindAdapter(clients={"edb": stub})
     df = adapter.fetch_edb_series(["光伏电池产量"], start="20260101", end="20260228")
     assert list(df.columns) == ["indicator", "obs_date", "value"]
+    assert set(df["indicator"]) == {"光伏电池产量"}
     assert df["value"].tolist() == [100.0, 120.0]
     assert str(df["obs_date"].dtype) == "datetime64[ns]"
     tool, arguments = stub.calls[0]

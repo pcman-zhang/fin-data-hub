@@ -19,6 +19,7 @@ from fin_data_hub.codes import SecCode, SecType
 from fin_data_hub.enums import Source
 from fin_data_hub.errors import SourceError, UnsupportedCapability
 from fin_data_hub.mapping import get_mapper
+from fin_data_hub.ratelimit import default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
 
 _LOT_TO_SHARE = 100
@@ -54,6 +55,7 @@ class AkShareAdapter(BaseAdapter):
     def __init__(self, *, ak_module: Any | None = None) -> None:
         self._ak = ak_module if ak_module is not None else _default_module()
         self._mapper = get_mapper(self.source)
+        self._rate_limits = default_rate_limiter_set(self.source)
 
     # ------------------------------------------------------------------ 行情
     def fetch_bars(
@@ -179,6 +181,7 @@ class AkShareAdapter(BaseAdapter):
         fn = getattr(self._ak, name, None)
         if fn is None:
             raise SourceError(f"AkShare 缺少接口 {name!r}")
+        self._acquire(name)
         start = time.monotonic()
         try:
             result = fn(**kwargs)

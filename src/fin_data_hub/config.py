@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from fin_data_hub.enums import Source
+from fin_data_hub.ratelimit import RateLimitConfig
 from fin_data_hub.usage import BudgetConfig
 
 
@@ -50,4 +52,6 @@ class HubConfig:
     akshare: AkShareConfig = field(default_factory=AkShareConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
+    #: 按源覆盖限流配置（键为 source 值，如 "ifind"）；未覆盖时用默认表
+    rate_limits: Mapping[str, RateLimitConfig] = field(default_factory=dict)
     default_source: Source | None = None

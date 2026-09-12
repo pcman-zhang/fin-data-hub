@@ -32,6 +32,7 @@ from fin_data_hub.errors import (
     UnsupportedCapability,
 )
 from fin_data_hub.mcp import McpHttpClient, McpServerConfig, unwrap_content
+from fin_data_hub.ratelimit import default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
 
 WIND_BASE_URL = "https://mcp.wind.com.cn"
@@ -132,6 +133,7 @@ class WindAdapter(BaseAdapter):
         self._config = config or WindConfig()
         self._clients: dict[str, Any] = dict(clients or {})
         self._owns_clients = clients is None
+        self._rate_limits = default_rate_limiter_set(self.source)
 
     def close(self) -> None:
         if not self._owns_clients:
@@ -307,6 +309,7 @@ class WindAdapter(BaseAdapter):
 
     def _call_data(self, service: str, tool: str, arguments: dict) -> dict:
         client = self._client(service)
+        self._acquire(tool)
         start = time.monotonic()
         try:
             result = client.call_tool(tool, arguments)

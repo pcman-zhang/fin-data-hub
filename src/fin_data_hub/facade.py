@@ -16,6 +16,11 @@ from fin_data_hub.capabilities import split_codes
 from fin_data_hub.codes import SecCode, parse_codes
 from fin_data_hub.config import HubConfig
 from fin_data_hub.enums import Source
+from fin_data_hub.ratelimit import (
+    RateLimiter,
+    RateLimiterSet,
+    default_rate_limiter_set,
+)
 from fin_data_hub.schemas import (
     BARS_COLUMNS,
     CALENDAR_COLUMNS,
@@ -67,6 +72,7 @@ class DataHub:
         self.config = config or HubConfig()
         self.registry = registry if registry is not None else SourceRegistry()
         self.usage = UsageLedger(self.config.budget)
+        self._rate_limiters: dict[Source, RateLimiterSet] = {}
         cc = self.config.cache
         self.cache = MemoryCache(
             max_bytes=cc.max_bytes,
@@ -263,9 +269,24 @@ class DataHub:
         return _with_cached_flag(df, was_cached)
 
     # ------------------------------------------------------------------ 内部
+    def _limiter_for(self, source: Source) -> RateLimiterSet:
+        limiter = self._rate_limiters.get(source)
+        if limiter is None:
+            override = self.config.rate_limits.get(str(source))
+            if override is None:
+                limiter = default_rate_limiter_set(source)
+            else:
+                limiter = RateLimiterSet(
+                    RateLimiter(override.rate, override.burst),
+                    timeout=override.timeout,
+                )
+            self._rate_limiters[source] = limiter
+        return limiter
+
     def _adapter(self, source: Source, capability: str) -> BaseAdapter:
         adapter = self.registry.get_for_capability(source, capability)
         adapter.bind_usage(self.usage)
+        adapter.bind_rate_limits(self._limiter_for(source))
         return adapter
 
     def stats(self) -> dict:

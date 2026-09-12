@@ -8,6 +8,16 @@ def test_version_is_exported() -> None:
     assert fin_data_hub.__version__
 
 
+def test_version_matches_package_metadata() -> None:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        installed = version("fin-data-hub")
+    except PackageNotFoundError:
+        pytest.skip("包未安装（metadata 不可用）")
+    assert installed == fin_data_hub.__version__
+
+
 def test_source_enum_values() -> None:
     assert {s.value for s in Source} == {"tushare", "wind", "ifind", "akshare"}
 

@@ -7,7 +7,8 @@
 - **统一代码模型**：以 WindCode 风格 `symbol.VENUE` 作为标的主键（如 `600000.SH`、`000001.SZ`、`510300.SH`、`000001.OF`），各源代码差异由映射层收敛。
 - **统一接口 + 显式来源**：取数接口通过 `source` 参数明确数据来源，内部按 source 调度到对应适配器。
 - **配置注入**：Tushare token、Wind / iFinD 凭证由调用方通过配置对象传入；库不读取环境变量、全局配置或用户目录。
-- **能力驱动的请求合并**：按各源/端点上限自动分块（如单标的源逐代码、Wind 快照 ≤50、iFinD EDB 一次一指标）并合并去重。
+- **能力驱动的请求合并**：按各源/端点上限自动分块（如单标的源逐代码、Wind 快照 ≤50、iFinD EDB 多指标聚合）并合并去重。
+- **每源限流**：令牌桶（QPS）在适配器调用边界生效，可按源覆盖；等待超时抛出 `RateLimitTimeout`。
 - **线程安全**：共享状态加锁、缓存 single-flight，避免并发重复请求消耗配额。
 - **内存缓存**：TTL + LRU + 字节预算，`force=True` 跳过缓存强制刷新。
 - **调用计量**：按源统计调用次数与估算成本、预算告警，`hub.stats()` 查看；跨进程汇总通过 `on_record` 回调。
@@ -22,6 +23,8 @@ pip install "fin-data-hub[wind]"      # Wind（含 httpx）
 ```
 
 按需安装对应数据源的 extras；不使用某源时无需安装其依赖。核心依赖仅 `pandas`。iFinD / Wind 通过厂商远端 MCP（HTTP JSON-RPC）接入，**不需要安装 WindPy / iFinDPy**。
+
+版本：`fin_data_hub.__version__`（单一来源 `src/fin_data_hub/_version.py`，`pyproject.toml` 动态读取）。
 
 ## 快速开始
 
@@ -97,13 +100,14 @@ hub = DataHub(config, registry=registry)
 | `get_fund_nav` | ✅ | ✅ 场外基金 | — | ✅ 多基金合并 |
 | `get_reference` | ✅ 股票 / 基金 / 指数列表 | — | — | — |
 | `get_trade_calendar` | ✅ | ✅ | — | — |
-| EDB 宏观指标 | — | — | ✅ 精确代码批量 | ✅ 一次一个指标 |
+| EDB 宏观指标 | — | — | ✅ 精确代码批量 | ✅ 多指标聚合 |
 | 债券行情 | — | — | ✅ 长区间 ≤90 天分块 | — |
 
 限制说明：
 
 - Wind 日线不传 `period`（后端不接受 `period=1d`）；K 线为单代码接口，多代码由库逐次调用。
 - iFinD 的 K 线目前仅支持指数（`index_data`）；场外基金净值走 `get_fund_market_performance`（NL 聚合）。
+- iFinD 的 NL 工具普遍支持多标的/多指标聚合（已抽验 stock/fund/edb），库内合并为一次调用，不做逐标的拆分；单次 50 代码为请求体积的安全上限。
 - AkShare 无参考数据接口；各接口为单标的形式，批量请求由库自动拆分。
 
 ## 配置与凭证
@@ -124,6 +128,23 @@ config = HubConfig(
     ),
 )
 ```
+
+## 限流
+
+- 每源独立令牌桶（QPS），在适配器真实调用前获取令牌；等待超时抛出 `RateLimitTimeout`。
+- 默认值（保守起步）：Tushare 2 QPS、AkShare 1 QPS、Wind 1 QPS、**iFinD 2 QPS**。
+- 按源覆盖：
+
+```python
+from fin_data_hub import HubConfig
+from fin_data_hub.ratelimit import RateLimitConfig
+
+config = HubConfig(
+    rate_limits={"ifind": RateLimitConfig(rate=2.0, burst=2.0, timeout=30.0)}
+)
+```
+
+- 限流为进程内限制；多进程部署会叠加实际请求量。
 
 ## 缓存与刷新
 

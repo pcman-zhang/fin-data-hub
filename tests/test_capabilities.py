@@ -6,10 +6,10 @@ from fin_data_hub.capabilities import EndpointCapability, get_capability, split_
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 
 
-# 能力表：iFinD EDB 一次一指标、Wind 快照单次 ≤50
+# 能力表：iFinD EDB 支持多指标聚合、Wind 快照单次 ≤50
 def test_capability_table_facts() -> None:
     edb = get_capability(Source.IFIND, "edb")
-    assert edb.max_indicators_per_call == 1
+    assert edb.max_indicators_per_call is None
     assert edb.cost_class == "metered"
 
     snapshot = get_capability(Source.WIND, "snapshot")
@@ -19,6 +19,11 @@ def test_capability_table_facts() -> None:
     tushare_bars = get_capability(Source.TUSHARE, "bars")
     assert tushare_bars.max_codes_per_call is None
     assert tushare_bars.cost_class == "free"
+
+
+def test_ifind_nl_endpoints_declare_multi_symbol() -> None:
+    for capability in ("bars", "fund_nav", "edb"):
+        assert get_capability(Source.IFIND, capability).supports_multi_symbol is True
 
 
 def test_get_capability_default_for_unknown() -> None:

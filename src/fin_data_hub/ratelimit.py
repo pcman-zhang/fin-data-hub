@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TypeVar
 
+from fin_data_hub.enums import Source
 from fin_data_hub.errors import NetworkError, RateLimitError, RateLimitTimeout
 
 T = TypeVar("T")
@@ -96,8 +97,11 @@ class RateLimiterSet:
         self,
         default: RateLimiter,
         endpoints: Mapping[str, RateLimiter] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> None:
         self.default = default
+        self.timeout = timeout
         self._endpoints = dict(endpoints or {})
 
     def acquire(
@@ -107,12 +111,30 @@ class RateLimiterSet:
         *,
         timeout: float | None = None,
     ) -> None:
-        self.get(endpoint).acquire(tokens, timeout=timeout)
+        effective = timeout if timeout is not None else self.timeout
+        self.get(endpoint).acquire(tokens, timeout=effective)
 
     def get(self, endpoint: str | None = None) -> RateLimiter:
         if endpoint is not None and endpoint in self._endpoints:
             return self._endpoints[endpoint]
         return self.default
+
+
+#: 各源默认限流（保守起步，可按账号/积分档通过 HubConfig.rate_limits 覆盖）。
+DEFAULT_RATE_LIMITS: dict[Source, RateLimitConfig] = {
+    Source.TUSHARE: RateLimitConfig(rate=2.0, burst=2.0, timeout=30.0),
+    Source.AKSHARE: RateLimitConfig(rate=1.0, burst=1.0, timeout=30.0),
+    Source.WIND: RateLimitConfig(rate=1.0, burst=1.0, timeout=30.0),
+    Source.IFIND: RateLimitConfig(rate=2.0, burst=2.0, timeout=30.0),
+}
+
+
+def default_rate_limiter_set(source: Source | str) -> RateLimiterSet:
+    """按默认表构建某源的限流器集合。"""
+    config = DEFAULT_RATE_LIMITS.get(Source(source), RateLimitConfig(rate=1.0))
+    return RateLimiterSet(
+        RateLimiter(config.rate, config.burst), timeout=config.timeout
+    )
 
 
 def compute_backoff(

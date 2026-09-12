@@ -1,0 +1,275 @@
+"""Tushare 数据源适配器。
+
+- 代码：canonical（``600000.SH`` / ``000001.OF``）直通 ``ts_code``；
+- 单位统一：``volume`` 股（Tushare 手 ×100）、``amount`` 元（Tushare 千元 ×1000）；
+- 复权：``None`` 用 ``daily``；``qfq`` / ``hfq`` 用 ``adj_factor`` 计算
+  （``qfq = price * factor / latest_factor``，``hfq = price * factor``）；
+- 快照（snapshot）不在能力范围（Tushare 免费接口无稳定实时快照）。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pandas as pd
+
+from fin_data_hub.codes import SecCode
+from fin_data_hub.config import TushareConfig
+from fin_data_hub.enums import Source
+from fin_data_hub.errors import MissingCredentialError, SourceError, UnsupportedCapability
+from fin_data_hub.mapping import get_mapper
+from fin_data_hub.sources.base import BaseAdapter
+
+_LOT_TO_SHARE = 100
+_THOUSAND_YUAN_TO_YUAN = 1000
+
+
+def _to_ts_date(value: str) -> str:
+    """``YYYY-MM-DD`` / ``YYYYMMDD`` → ``YYYYMMDD``。"""
+    text = str(value).strip().replace("-", "")
+    if len(text) != 8 or not text.isdigit():
+        raise ValueError(f"日期格式应为 YYYYMMDD 或 YYYY-MM-DD: {value!r}")
+    return text
+
+
+def _from_ts_date(series: pd.Series) -> pd.Series:
+    return pd.to_datetime(
+        series.astype(str), format="%Y%m%d", errors="coerce"
+    ).astype("datetime64[ns]")
+
+
+class TushareAdapter(BaseAdapter):
+    source = Source.TUSHARE
+    capabilities = frozenset(
+        {
+            BaseAdapter.CAP_BARS,
+            BaseAdapter.CAP_FUND_NAV,
+            BaseAdapter.CAP_REFERENCE,
+            BaseAdapter.CAP_TRADE_CALENDAR,
+        }
+    )
+
+    def __init__(
+        self,
+        config: TushareConfig | None = None,
+        *,
+        api: Any | None = None,
+    ) -> None:
+        self._mapper = get_mapper(self.source)
+        if api is not None:
+            self._api = api
+            return
+        token = (config or TushareConfig()).token
+        if not token:
+            raise MissingCredentialError(
+                "Tushare 需要 token（通过 TushareConfig(token=...) 注入）"
+            )
+        self._api = _default_api(token)
+
+    # ------------------------------------------------------------------ 行情
+    def fetch_bars(
+        self,
+        codes: list[SecCode],
+        *,
+        start: str,
+        end: str,
+        freq: str,
+        adjust: str | None,
+        fields: tuple[str, ...] | None,
+    ) -> pd.DataFrame:
+        if freq not in ("1d", "d", "D"):
+            raise UnsupportedCapability(f"Tushare 适配器暂不支持 freq={freq!r}（仅 1d）")
+        if adjust not in (None, "qfq", "hfq"):
+            raise ValueError(f"adjust 仅支持 None/qfq/hfq: {adjust!r}")
+
+        ts_codes = [self._mapper.to_source(c) for c in codes]
+        raw = self._query(
+            "daily",
+            ts_code=",".join(ts_codes),
+            start_date=_to_ts_date(start),
+            end_date=_to_ts_date(end),
+        )
+        if raw.empty:
+            return _empty_bars()
+
+        bars = pd.DataFrame(
+            {
+                "code": raw["ts_code"],
+                "date": raw["trade_date"],
+                "open": pd.to_numeric(raw["open"]),
+                "high": pd.to_numeric(raw["high"]),
+                "low": pd.to_numeric(raw["low"]),
+                "close": pd.to_numeric(raw["close"]),
+                "volume": pd.to_numeric(raw["vol"]) * _LOT_TO_SHARE,
+                "amount": pd.to_numeric(raw["amount"]) * _THOUSAND_YUAN_TO_YUAN,
+            }
+        )
+        bars["date"] = _from_ts_date(bars["date"])
+
+        if adjust in ("qfq", "hfq"):
+            factors = self._query(
+                "adj_factor",
+                ts_code=",".join(ts_codes),
+                start_date=_to_ts_date(start),
+                end_date=_to_ts_date(end),
+            )
+            bars = self._apply_adjust(bars, factors, adjust)
+
+        return bars.sort_values(["code", "date"]).reset_index(drop=True)
+
+    def _apply_adjust(
+        self, bars: pd.DataFrame, factors: pd.DataFrame, adjust: str
+    ) -> pd.DataFrame:
+        factor_frame = pd.DataFrame(
+            {
+                "code": factors["ts_code"],
+                "date": _from_ts_date(factors["trade_date"]),
+                "adj_factor": pd.to_numeric(factors["adj_factor"]),
+            }
+        )
+        merged = bars.merge(factor_frame, on=["code", "date"], how="left")
+        if merged["adj_factor"].isna().any():
+            raise SourceError("Tushare adj_factor 缺失，无法计算复权价")
+        if adjust == "qfq":
+            latest = merged.groupby("code")["adj_factor"].transform("last")
+            ratio = merged["adj_factor"] / latest
+        else:
+            ratio = merged["adj_factor"]
+        for column in ("open", "high", "low", "close"):
+            merged[column] = merged[column] * ratio
+        return merged.drop(columns=["adj_factor"])
+
+    # -------------------------------------------------------------- 基金净值
+    def fetch_fund_nav(
+        self,
+        codes: list[SecCode],
+        *,
+        start: str | None,
+        end: str | None,
+    ) -> pd.DataFrame:
+        ts_codes = [self._mapper.to_source(c) for c in codes]
+        kwargs: dict[str, Any] = {"ts_code": ",".join(ts_codes)}
+        if start:
+            kwargs["start_date"] = _to_ts_date(start)
+        if end:
+            kwargs["end_date"] = _to_ts_date(end)
+        raw = self._query("fund_nav", **kwargs)
+        if raw.empty:
+            return pd.DataFrame(
+                {
+                    "code": [],
+                    "date": pd.Series([], dtype="datetime64[ns]"),
+                    "unit_nav": [],
+                    "accum_nav": [],
+                    "daily_return": [],
+                }
+            )
+        nav = pd.DataFrame(
+            {
+                "code": raw["ts_code"],
+                "date": _from_ts_date(raw["nav_date"]),
+                "unit_nav": pd.to_numeric(raw["unit_nav"]),
+                "accum_nav": pd.to_numeric(raw["accum_nav"]),
+            }
+        ).sort_values(["code", "date"])
+        nav["daily_return"] = (
+            nav.groupby("code")["unit_nav"].pct_change() * 100
+        )
+        return nav.reset_index(drop=True)
+
+    # -------------------------------------------------------------- 参考数据
+    def fetch_reference(self, kind: str) -> pd.DataFrame:
+        if kind == "stock_list":
+            raw = self._query("stock_basic", fields="ts_code,name,list_date,market,industry")
+            return pd.DataFrame(
+                {
+                    "code": raw["ts_code"],
+                    "name": raw["name"],
+                    "list_date": _from_ts_date(raw["list_date"]),
+                    "market": raw.get("market"),
+                    "industry": raw.get("industry"),
+                }
+            )
+        if kind == "fund_list":
+            raw = self._query(
+                "fund_basic", fields="ts_code,name,fund_type,management,list_date,market"
+            )
+            return pd.DataFrame(
+                {
+                    "code": raw["ts_code"],
+                    "name": raw["name"],
+                    "fund_type": raw.get("fund_type"),
+                    "management": raw.get("management"),
+                    "list_date": _from_ts_date(raw["list_date"]),
+                    "market": raw.get("market"),
+                }
+            )
+        if kind == "index_list":
+            raw = self._query(
+                "index_basic",
+                fields="ts_code,name,market,category,publisher,list_date",
+            )
+            return pd.DataFrame(
+                {
+                    "code": raw["ts_code"],
+                    "name": raw["name"],
+                    "market": raw.get("market"),
+                    "category": raw.get("category"),
+                    "publisher": raw.get("publisher"),
+                    "list_date": _from_ts_date(raw["list_date"]),
+                }
+            )
+        raise UnsupportedCapability(f"Tushare 不支持 reference kind={kind!r}")
+
+    # ---------------------------------------------------------------- 日历
+    def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:
+        raw = self._query(
+            "trade_cal",
+            exchange="SSE",
+            start_date=_to_ts_date(start),
+            end_date=_to_ts_date(end),
+        )
+        return pd.DataFrame(
+            {
+                "date": _from_ts_date(raw["cal_date"]),
+                "is_open": pd.to_numeric(raw["is_open"]).astype(bool),
+            }
+        ).sort_values("date")
+
+    # ------------------------------------------------------------------ 内部
+    def _query(self, endpoint: str, **kwargs: Any) -> pd.DataFrame:
+        fn = getattr(self._api, endpoint, None)
+        if fn is None:
+            raise SourceError(f"Tushare API 缺少接口 {endpoint!r}")
+        try:
+            result = fn(**kwargs)
+        except Exception as exc:  # noqa: BLE001 - 统一映射源端异常
+            raise SourceError(f"Tushare {endpoint} 调用失败: {exc}") from exc
+        if result is None:
+            return pd.DataFrame()
+        return pd.DataFrame(result)
+
+
+def _empty_bars() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "code": [],
+            "date": pd.Series([], dtype="datetime64[ns]"),
+            "open": [],
+            "high": [],
+            "low": [],
+            "close": [],
+            "volume": [],
+            "amount": [],
+        }
+    )
+
+
+def _default_api(token: str) -> Any:
+    try:
+        import tushare
+    except ImportError as exc:  # pragma: no cover - 依赖缺失分支
+        raise SourceError(
+            "未安装 tushare 包：请安装 fin-data-hub[tushare]"
+        ) from exc
+    return tushare.pro_api(token)

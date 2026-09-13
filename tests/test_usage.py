@@ -2,7 +2,7 @@ import threading
 
 import pandas as pd
 
-from fin_data_hub import FinDataHub, HubConfig, Source
+from fin_data_hub import Capability, FinDataHub, HubConfig, Source
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 from fin_data_hub.sources.tushare import TushareAdapter
 from fin_data_hub.usage import BudgetConfig, UsageLedger
@@ -139,7 +139,7 @@ def test_adapter_records_usage_at_call_boundary() -> None:
 
 class TrackingAdapter(BaseAdapter):
     source = Source.TUSHARE
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
     def fetch_bars(self, codes, *, start, end, freq, adjust, fields):
         self._record("daily", codes=[code.canonical for code in codes])

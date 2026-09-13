@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from fin_data_hub import (
+    Capability,
     FinDataHub,
     HubConfig,
     ResponseParseError,
@@ -16,11 +17,11 @@ class FakeAdapter(BaseAdapter):
     source = Source.TUSHARE
     capabilities = frozenset(
         {
-            BaseAdapter.CAP_BARS,
-            BaseAdapter.CAP_SNAPSHOT,
-            BaseAdapter.CAP_FUND_NAV,
-            BaseAdapter.CAP_REFERENCE,
-            BaseAdapter.CAP_TRADE_CALENDAR,
+            Capability.BARS,
+            Capability.SNAPSHOT,
+            Capability.FUND_NAV,
+            Capability.REFERENCE,
+            Capability.TRADE_CALENDAR,
         }
     )
 
@@ -122,7 +123,7 @@ class FakeAdapter(BaseAdapter):
 
 
 class BarsOnlyAdapter(FakeAdapter):
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
 
 def make_hub(*, adapter: BaseAdapter | None = None, config: HubConfig | None = None) -> FinDataHub:
@@ -148,9 +149,11 @@ def test_get_bars_end_to_end() -> None:
         "close",
         "volume",
         "amount",
+        "currency",
     ]
     assert df.attrs["source"] == "tushare"
     assert df.attrs["cached"] is False
+    assert df["currency"].tolist() == ["CNY", "CNY"]
     assert df["date"].dtype == "datetime64[ns]"
     # 适配器收到 SecCode 列表
     call = adapter.calls[0]
@@ -204,7 +207,14 @@ def test_fund_nav_reference_calendar() -> None:
     hub = make_hub(adapter=adapter)
 
     nav = hub.get_fund_nav(["000001.OF"], source="tushare")
-    assert list(nav.columns) == ["code", "date", "unit_nav", "accum_nav", "daily_return"]
+    assert list(nav.columns) == [
+        "code",
+        "date",
+        "unit_nav",
+        "accum_nav",
+        "daily_return",
+        "currency",
+    ]
 
     stocks = hub.get_reference("stock_list", source="tushare")
     assert stocks.iloc[0]["name"] == "浦发银行"

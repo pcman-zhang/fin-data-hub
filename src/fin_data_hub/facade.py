@@ -15,8 +15,12 @@ from fin_data_hub.cache import MemoryCache
 from fin_data_hub.capabilities import split_codes
 from fin_data_hub.codes import SecCode, parse_codes
 from fin_data_hub.config import HubConfig
-from fin_data_hub.enums import Source
-from fin_data_hub.errors import MissingCredentialError, SourceError
+from fin_data_hub.enums import Capability, Source
+from fin_data_hub.errors import (
+    MissingCredentialError,
+    SourceError,
+    UnsupportedCapability,
+)
 from fin_data_hub.ratelimit import (
     RateLimiter,
     RateLimiterSet,
@@ -29,6 +33,8 @@ from fin_data_hub.routing import (
     missing_columns,
 )
 from fin_data_hub.schemas import (
+    ADJUST_FACTOR_COLUMNS,
+    ADJUSTMENT_EVENT_COLUMNS,
     BARS_COLUMNS,
     CALENDAR_COLUMNS,
     NAV_COLUMNS,
@@ -115,14 +121,14 @@ class FinDataHub:
         if not scodes:
             raise ValueError("codes 不能为空")
         plan = build_bars_plan(resolved, adjust, self.config.routing)
-        primary_adapter = self._adapter(plan.primary, BaseAdapter.CAP_BARS)
+        primary_adapter = self._adapter(plan.primary, Capability.BARS)
         factor_adapter = (
-            self._adapter(plan.factor_source, BaseAdapter.CAP_ADJUST_FACTORS)
+            self._adapter(plan.factor_source, Capability.ADJUST_FACTORS)
             if plan.factor_source is not None
             else None
         )
         fallback_adapters = [
-            (str(fallback), self._adapter(fallback, BaseAdapter.CAP_BARS))
+            (str(fallback), self._adapter(fallback, Capability.BARS))
             for fallback in plan.fallbacks
             if fallback != plan.primary
         ]
@@ -242,7 +248,7 @@ class FinDataHub:
         scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
         if not scodes:
             raise ValueError("codes 不能为空")
-        adapter = self._adapter(resolved, BaseAdapter.CAP_SNAPSHOT)
+        adapter = self._adapter(resolved, Capability.SNAPSHOT)
         key = (
             "snapshot",
             str(resolved),
@@ -279,7 +285,7 @@ class FinDataHub:
         scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
         if not scodes:
             raise ValueError("codes 不能为空")
-        adapter = self._adapter(resolved, BaseAdapter.CAP_FUND_NAV)
+        adapter = self._adapter(resolved, Capability.FUND_NAV)
         key = (
             "fund_nav",
             str(resolved),
@@ -315,7 +321,7 @@ class FinDataHub:
     ) -> pd.DataFrame:
         columns = reference_columns(kind)
         resolved = self._resolve_source(source)
-        adapter = self._adapter(resolved, BaseAdapter.CAP_REFERENCE)
+        adapter = self._adapter(resolved, Capability.REFERENCE)
         key = ("reference", str(resolved), kind)
         was_cached = (not force) and self.cache.contains(key)
 
@@ -340,7 +346,7 @@ class FinDataHub:
     ) -> pd.DataFrame:
         resolved = self._resolve_source(source)
         adapter = self._adapter(
-            resolved, BaseAdapter.CAP_TRADE_CALENDAR
+            resolved, Capability.TRADE_CALENDAR
         )
         key = ("trade_calendar", str(resolved), start, end)
         was_cached = (not force) and self.cache.contains(key)
@@ -353,6 +359,135 @@ class FinDataHub:
 
         df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
         return _with_cached_flag(df, was_cached)
+
+    # -------------------------------------------------------------- 复权数据
+    def get_adjust_factors(
+        self,
+        codes: str | SecCode | Sequence[str | SecCode],
+        *,
+        start: str,
+        end: str,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """复权因子（绝对累计；默认路由到 ``RoutingConfig.factor_source``）。"""
+        if source is not None:
+            resolved = Source(source)
+        elif self.config.routing.factor_source is not None:
+            resolved = self.config.routing.factor_source
+        else:
+            raise UnsupportedCapability("未配置因子源（RoutingConfig.factor_source）")
+        scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
+        if not scodes:
+            raise ValueError("codes 不能为空")
+        adapter = self._adapter(resolved, Capability.ADJUST_FACTORS)
+        key = (
+            "adjust_factors",
+            str(resolved),
+            tuple(sorted(c.canonical for c in scodes)),
+            start,
+            end,
+        )
+        was_cached = (not force) and self.cache.contains(key)
+
+        def load() -> pd.DataFrame:
+            frames = [
+                adapter.fetch_adjust_factors(chunk, start=start, end=end)
+                for chunk in split_codes(
+                    resolved, Capability.ADJUST_FACTORS, scodes
+                )
+            ]
+            merged = _merge_frames(
+                frames, dedupe_on=("code", "date"), sort_by=("code", "date")
+            )
+            return finalize_frame(
+                merged,
+                columns=ADJUST_FACTOR_COLUMNS,
+                source=resolved,
+                cached=was_cached,
+            )
+
+        df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
+        return _with_cached_flag(df, was_cached)
+
+    def get_adjustment_events(
+        self,
+        codes: str | SecCode | Sequence[str | SecCode],
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """公司行为事件流（复权因子推导/对账用）。"""
+        resolved = self._resolve_source(source)
+        scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
+        if not scodes:
+            raise ValueError("codes 不能为空")
+        adapter = self._adapter(resolved, Capability.ADJUSTMENT_EVENTS)
+        key = (
+            "adjustment_events",
+            str(resolved),
+            tuple(sorted(c.canonical for c in scodes)),
+            start,
+            end,
+        )
+        was_cached = (not force) and self.cache.contains(key)
+
+        def load() -> pd.DataFrame:
+            frames = [
+                adapter.fetch_adjustment_events(chunk, start=start, end=end)
+                for chunk in split_codes(
+                    resolved, Capability.ADJUSTMENT_EVENTS, scodes
+                )
+            ]
+            merged = _merge_frames(
+                frames, dedupe_on=("code", "ex_date"), sort_by=("code", "ex_date")
+            )
+            return finalize_frame(
+                merged,
+                columns=ADJUSTMENT_EVENT_COLUMNS,
+                source=resolved,
+                cached=was_cached,
+            )
+
+        df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
+        return _with_cached_flag(df, was_cached)
+
+    # ---------------------------------------------------------- 预留接口
+    def get_intraday_bars(
+        self,
+        codes: str | SecCode | Sequence[str | SecCode],
+        *,
+        start: str,
+        end: str,
+        freq: str = "1m",
+        source: Source | str | None = None,
+        fields: _Fields = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """预留接口：高频数据透传（doc-2 §6.15），v0 未实现。"""
+        raise UnsupportedCapability(
+            "预留接口：高频数据透传特性（doc-2 §6.15），v0 未实现"
+        )
+
+    def get_edb_series(
+        self,
+        indicators: Sequence[str],
+        *,
+        start: str,
+        end: str,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """预留接口：宏观数据平面（EDB）后续接入，v0 未实现。"""
+        raise UnsupportedCapability(
+            "预留接口：宏观数据平面（EDB）规划中，v0 未实现"
+        )
 
     # ------------------------------------------------------------------ 内部
     def _limiter_for(self, source: Source) -> RateLimiterSet:

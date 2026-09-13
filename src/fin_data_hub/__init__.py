@@ -2,9 +2,10 @@
 
 from fin_data_hub._version import __version__
 from fin_data_hub.cache import MemoryCache
-from fin_data_hub.codes import SecCode, SecType, parse_codes
+from fin_data_hub.codes import SecCode, parse_codes
 from fin_data_hub.config import (
     AkShareConfig,
+    BaostockConfig,
     CacheConfig,
     FuyaoConfig,
     HubConfig,
@@ -12,7 +13,16 @@ from fin_data_hub.config import (
     TushareConfig,
     WindConfig,
 )
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import (
+    Adjust,
+    Capability,
+    Currency,
+    Freq,
+    ReferenceKind,
+    SecType,
+    Source,
+    Venue,
+)
 from fin_data_hub.errors import (
     FinDataHubError,
     MissingCredentialError,
@@ -34,6 +44,12 @@ __all__ = [
     "Source",
     "SecCode",
     "SecType",
+    "Venue",
+    "Currency",
+    "Adjust",
+    "Freq",
+    "ReferenceKind",
+    "Capability",
     "parse_codes",
     "FinDataHub",
     "HubConfig",
@@ -42,6 +58,7 @@ __all__ = [
     "WindConfig",
     "IfindConfig",
     "AkShareConfig",
+    "BaostockConfig",
     "FuyaoConfig",
     "MemoryCache",
     "RoutingConfig",

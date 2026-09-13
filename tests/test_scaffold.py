@@ -19,7 +19,7 @@ def test_version_matches_package_metadata() -> None:
 
 
 def test_source_enum_values() -> None:
-    assert {s.value for s in Source} == {"tushare", "wind", "ifind", "akshare", "fuyao"}
+    assert {s.value for s in Source} == {"tushare", "wind", "ifind", "akshare", "fuyao", "baostock"}
 
 
 def test_source_is_str() -> None:

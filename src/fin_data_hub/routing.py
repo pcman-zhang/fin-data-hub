@@ -18,8 +18,9 @@ class RoutingConfig:
     """跨源路由配置（doc-5 §4）。"""
 
     factor_source: Source | None = Source.TUSHARE
+    # 开发期先排除付费源（Wind/iFinD 需显式配置才参与路由）
     trusted_native_adjust: frozenset[Source] = frozenset(
-        {Source.TUSHARE, Source.WIND, Source.AKSHARE}
+        {Source.TUSHARE, Source.AKSHARE}
     )
     fallbacks: tuple[Source, ...] = ()
     field_fill: bool = True
@@ -97,7 +98,12 @@ def fill_missing_fields(
 def apply_adjustment(
     bars: pd.DataFrame, factors: pd.DataFrame, adjust: str
 ) -> pd.DataFrame:
-    """按 raw + factor 计算复权价（doc-5 §3）。"""
+    """按 raw + factor 计算复权价（doc-5 §3）。
+
+    因子按**事件步进**语义对齐（backward ``merge_asof``）：因子在事件日切换并
+    向后生效，支持稀疏因子源（如 BaoStock 仅除权日有行 + 窗口基准行）与非交易日
+    起始窗口；``qfq = raw × f / f_last``、``hfq = raw × f``。
+    """
     if adjust not in ("qfq", "hfq"):
         raise ValueError(f"adjust 仅支持 qfq/hfq: {adjust!r}")
     if bars.empty:
@@ -106,10 +112,16 @@ def apply_adjustment(
     factors = factors.copy()
     bars["date"] = pd.to_datetime(bars["date"]).astype("datetime64[ns]")
     factors["date"] = pd.to_datetime(factors["date"]).astype("datetime64[ns]")
-    merged = bars.merge(factors, on=["code", "date"], how="left").sort_values(
-        ["code", "date"]
+    factors = factors.dropna(subset=["date", "adj_factor"])
+    if factors.empty:
+        raise SourceError("复权因子缺失（对齐后仍为 NaN），无法计算复权价")
+    merged = pd.merge_asof(
+        bars.sort_values("date"),
+        factors[["code", "date", "adj_factor"]].sort_values("date"),
+        on="date",
+        by="code",
+        direction="backward",
     )
-    merged["adj_factor"] = merged.groupby("code")["adj_factor"].ffill()
     if merged["adj_factor"].isna().any():
         raise SourceError("复权因子缺失（对齐后仍为 NaN），无法计算复权价")
     if adjust == "qfq":
@@ -120,4 +132,8 @@ def apply_adjustment(
     for column in ("open", "high", "low", "close"):
         if column in merged.columns:
             merged[column] = merged[column] * ratio
-    return merged.drop(columns=["adj_factor"]).reset_index(drop=True)
+    return (
+        merged.drop(columns=["adj_factor"])
+        .sort_values(["code", "date"])
+        .reset_index(drop=True)
+    )

@@ -18,7 +18,7 @@ import pandas as pd
 
 from fin_data_hub.codes import SecCode
 from fin_data_hub.config import FuyaoConfig
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, Source
 from fin_data_hub.errors import (
     MissingCredentialError,
     NetworkError,
@@ -99,10 +99,11 @@ class FuyaoAdapter(BaseAdapter):
     source = Source.FUYAO
     capabilities = frozenset(
         {
-            BaseAdapter.CAP_BARS,
-            BaseAdapter.CAP_SNAPSHOT,
-            BaseAdapter.CAP_REFERENCE,
-            BaseAdapter.CAP_TRADE_CALENDAR,
+            Capability.BARS,
+            Capability.SNAPSHOT,
+            Capability.REFERENCE,
+            Capability.TRADE_CALENDAR,
+            Capability.ADJUSTMENT_EVENTS,
         }
     )
 

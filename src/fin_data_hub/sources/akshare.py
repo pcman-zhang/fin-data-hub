@@ -16,7 +16,7 @@ from typing import Any
 import pandas as pd
 
 from fin_data_hub.codes import SecCode, SecType
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, Source
 from fin_data_hub.errors import SourceError, UnsupportedCapability
 from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import default_rate_limiter_set
@@ -46,9 +46,9 @@ class AkShareAdapter(BaseAdapter):
     source = Source.AKSHARE
     capabilities = frozenset(
         {
-            BaseAdapter.CAP_BARS,
-            BaseAdapter.CAP_FUND_NAV,
-            BaseAdapter.CAP_TRADE_CALENDAR,
+            Capability.BARS,
+            Capability.FUND_NAV,
+            Capability.TRADE_CALENDAR,
         }
     )
 

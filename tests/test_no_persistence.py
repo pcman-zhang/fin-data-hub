@@ -1,12 +1,12 @@
 import pandas as pd
 
-from fin_data_hub import FinDataHub, HubConfig, Source
+from fin_data_hub import Capability, FinDataHub, HubConfig, Source
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 
 
 class _BarsAdapter(BaseAdapter):
     source = Source.TUSHARE
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
     def fetch_bars(self, codes, *, start, end, freq, adjust, fields):
         self._record("daily", codes=[code.canonical for code in codes])

@@ -48,6 +48,8 @@ def build_registry(
         _try_register(registry, "akshare", _akshare_adapter)
     if wants(Source.FUYAO) and cfg.fuyao and cfg.fuyao.api_key:
         _try_register(registry, "fuyao", lambda: _fuyao_adapter(cfg))
+    if wants(Source.BAOSTOCK):
+        _try_register(registry, "baostock", _baostock_adapter)
     return registry
 
 
@@ -88,3 +90,9 @@ def _fuyao_adapter(config: HubConfig) -> BaseAdapter:
     from fin_data_hub.sources.fuyao import FuyaoAdapter
 
     return FuyaoAdapter(config.fuyao)
+
+
+def _baostock_adapter() -> BaseAdapter:
+    from fin_data_hub.sources.baostock import BaoStockAdapter
+
+    return BaoStockAdapter()

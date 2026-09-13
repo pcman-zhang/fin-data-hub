@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from fin_data_hub import FinDataHub, HubConfig, RoutingConfig, SecCode, Source
+from fin_data_hub import Capability, FinDataHub, HubConfig, RoutingConfig, SecCode, Source
 from fin_data_hub.errors import SourceError, UnsupportedCapability
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 from fin_data_hub.sources.tushare import TushareAdapter
@@ -13,7 +13,7 @@ class RawBarsAdapter(BaseAdapter):
     """模拟 Fuyao：只有原始价，且可配置缺失字段/失败。"""
 
     source = Source.FUYAO
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
     def __init__(self, *, missing: tuple[str, ...] = (), fail: bool = False) -> None:
         self.missing = missing
@@ -47,7 +47,7 @@ class FillBarsAdapter(BaseAdapter):
     """模拟 AkShare 等补充源：提供完整字段。"""
 
     source = Source.AKSHARE
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
     def fetch_bars(self, codes, *, start, end, freq, adjust, fields):
         return pd.DataFrame(
@@ -73,7 +73,7 @@ class FactorAdapter(BaseAdapter):
 
     source = Source.TUSHARE
     capabilities = frozenset(
-        {BaseAdapter.CAP_BARS, BaseAdapter.CAP_ADJUST_FACTORS}
+        {Capability.BARS, Capability.ADJUST_FACTORS}
     )
 
     def __init__(self, factors=(("2026-01-05", 1.0), ("2026-01-06", 2.0))) -> None:
@@ -133,6 +133,36 @@ def test_composed_qfq_uses_latest_factor() -> None:
     )
     # qfq = raw × f / f_latest（f_latest=2.0）：10×0.5=5；20×1=20
     assert df["close"].tolist() == [5.0, 20.0]
+
+
+class SparseFactorAdapter(BaseAdapter):
+    """模拟 BaoStock：事件步进因子 + 窗口基准行（start 可为非交易日）。"""
+
+    source = Source.TUSHARE
+    capabilities = frozenset({Capability.ADJUST_FACTORS})
+
+    def fetch_adjust_factors(self, codes, *, start, end):
+        return pd.DataFrame(
+            {
+                "code": [code.canonical for code in codes for _ in range(2)],
+                "date": pd.to_datetime(["2026-01-01", "2026-01-06"] * len(codes)),
+                "adj_factor": [1.0, 2.0] * len(codes),
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("adjust", "expected"),
+    [("hfq", [10.0, 40.0]), ("qfq", [5.0, 20.0])],
+)
+def test_sparse_factors_backward_align(adjust: str, expected: list[float]) -> None:
+    # 因子仅有 2026-01-01（非交易日）基准行与 2026-01-06 事件行；
+    # backward 对齐：01-05 用 f=1.0，01-06 用 f=2.0
+    hub = make_hub(RawBarsAdapter(), SparseFactorAdapter())
+    df = hub.get_bars(
+        ["600519.SH"], start="20260101", end="20260131", adjust=adjust, source="fuyao"
+    )
+    assert df["close"].tolist() == expected
 
 
 def test_trusted_source_uses_native_adjust() -> None:
@@ -209,3 +239,104 @@ def test_tushare_fetch_adjust_factors() -> None:
     assert adapter.capabilities == frozenset(
         {"bars", "fund_nav", "reference", "trade_calendar", "adjust_factors"}
     )
+
+
+class MultiEndpointApi:
+    """按 ts_code 返回 adj_factor / fund_adj 两个接口。"""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def adj_factor(self, **kwargs):
+        self.calls.append("adj_factor")
+        codes = kwargs["ts_code"].split(",")
+        return pd.DataFrame(
+            {
+                "ts_code": codes,
+                "trade_date": ["20260105"] * len(codes),
+                "adj_factor": [1.5] * len(codes),
+            }
+        )
+
+    def fund_adj(self, **kwargs):
+        self.calls.append("fund_adj")
+        codes = kwargs["ts_code"].split(",")
+        return pd.DataFrame(
+            {
+                "ts_code": codes,
+                "trade_date": ["20260105"] * len(codes),
+                "adj_factor": [1.2] * len(codes),
+            }
+        )
+
+
+def test_tushare_factor_endpoint_by_asset_type() -> None:
+    api = MultiEndpointApi()
+    adapter = TushareAdapter(api=api)
+    df = adapter.fetch_adjust_factors(
+        [
+            SecCode.parse("600519.SH"),
+            SecCode.parse("510300.SH"),
+            SecCode.parse("161725.SZ"),
+        ],
+        start="20260101",
+        end="20260131",
+    )
+    assert api.calls == ["adj_factor", "fund_adj"]  # 股票 → adj_factor；ETF/LOF → fund_adj
+    assert sorted(df["code"].unique()) == ["161725.SZ", "510300.SH", "600519.SH"]
+    assert df["adj_factor"].tolist() == [1.2, 1.2, 1.5]
+
+
+def test_tushare_factor_unsupported_asset_raises() -> None:
+    adapter = TushareAdapter(api=MultiEndpointApi())
+    with pytest.raises(UnsupportedCapability, match="无复权因子"):
+        adapter.fetch_adjust_factors(
+            [SecCode.parse("000001.OF")], start="20260101", end="20260131"
+        )
+
+
+def test_get_adjust_factors_defaults_to_factor_source() -> None:
+    factor = FactorAdapter()
+    hub = make_hub(RawBarsAdapter(), factor)
+    df = hub.get_adjust_factors(["600519.SH"], start="20260101", end="20260131")
+    assert list(df.columns) == ["code", "date", "adj_factor"]
+    assert df["adj_factor"].tolist() == [1.0, 2.0]
+    assert df.attrs["source"] == "tushare"
+
+
+class EventsAdapter(BaseAdapter):
+    source = Source.FUYAO
+    capabilities = frozenset({Capability.ADJUSTMENT_EVENTS})
+
+    def fetch_adjustment_events(self, codes, *, start=None, end=None):
+        return pd.DataFrame(
+            {
+                "code": [code.canonical for code in codes],
+                "ex_date": ["2026-06-26"],
+                "dividend_per_share": [28.024],
+                "per_share_bonus": [0.0],
+            }
+        )
+
+
+def test_get_adjustment_events_via_fuyao() -> None:
+    hub = make_hub(EventsAdapter())
+    df = hub.get_adjustment_events(["600519.SH"], source="fuyao")
+    assert list(df.columns) == [
+        "code",
+        "ex_date",
+        "dividend_per_share",
+        "per_share_bonus",
+    ]
+    assert str(df["ex_date"].dtype) == "datetime64[ns]"
+    assert df.attrs["source"] == "fuyao"
+
+
+def test_reserved_interfaces_raise_unsupported() -> None:
+    hub = make_hub()
+    with pytest.raises(UnsupportedCapability, match="预留接口"):
+        hub.get_intraday_bars(
+            ["600519.SH"], start="20260101", end="20260102"
+        )
+    with pytest.raises(UnsupportedCapability, match="预留接口"):
+        hub.get_edb_series(["M0000001"], start="20260101", end="20260228")

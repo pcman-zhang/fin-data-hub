@@ -4,6 +4,8 @@
 - 单位统一：``volume`` 股（Tushare 手 ×100）、``amount`` 元（Tushare 千元 ×1000）；
 - 复权：``None`` 用 ``daily``；``qfq`` / ``hfq`` 用 ``adj_factor`` 计算
   （``qfq = price * factor / latest_factor``，``hfq = price * factor``）；
+- 因子接口按资产类型选择：股票 ``adj_factor``、ETF/LOF ``fund_adj``；
+  场外基金/指数无因子（实测，见 doc-8 §3.1）；
 - 快照（snapshot）不在能力范围（Tushare 免费接口无稳定实时快照）。
 """
 
@@ -16,7 +18,7 @@ import pandas as pd
 
 from fin_data_hub.codes import SecCode
 from fin_data_hub.config import TushareConfig
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, SecType, Source
 from fin_data_hub.errors import MissingCredentialError, SourceError, UnsupportedCapability
 from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import default_rate_limiter_set
@@ -24,6 +26,11 @@ from fin_data_hub.sources.base import BaseAdapter
 
 _LOT_TO_SHARE = 100
 _THOUSAND_YUAN_TO_YUAN = 1000
+_FACTOR_ENDPOINTS: dict[SecType, str] = {
+    SecType.STOCK: "adj_factor",
+    SecType.ETF: "fund_adj",
+    SecType.LOF: "fund_adj",
+}
 
 
 def _to_ts_date(value: str) -> str:
@@ -44,11 +51,11 @@ class TushareAdapter(BaseAdapter):
     source = Source.TUSHARE
     capabilities = frozenset(
         {
-            BaseAdapter.CAP_BARS,
-            BaseAdapter.CAP_FUND_NAV,
-            BaseAdapter.CAP_REFERENCE,
-            BaseAdapter.CAP_TRADE_CALENDAR,
-            BaseAdapter.CAP_ADJUST_FACTORS,
+            Capability.BARS,
+            Capability.FUND_NAV,
+            Capability.REFERENCE,
+            Capability.TRADE_CALENDAR,
+            Capability.ADJUST_FACTORS,
         }
     )
 
@@ -229,30 +236,47 @@ class TushareAdapter(BaseAdapter):
     def fetch_adjust_factors(
         self, codes: list[SecCode], *, start: str, end: str
     ) -> pd.DataFrame:
-        """复权因子（``adj_factor``）：``code/date/adj_factor``。"""
-        ts_codes = [self._mapper.to_source(c) for c in codes]
-        raw = self._query(
-            "adj_factor",
-            ts_code=",".join(ts_codes),
-            start_date=_to_ts_date(start),
-            end_date=_to_ts_date(end),
-        )
-        if raw.empty:
-            return pd.DataFrame(
-                {
-                    "code": [],
-                    "date": pd.Series([], dtype="datetime64[ns]"),
-                    "adj_factor": [],
-                }
+        """复权因子（``code/date/adj_factor``）：按资产类型选择接口。
+
+        - 股票 → ``adj_factor``；ETF/LOF → ``fund_adj``；
+        - 场外基金/指数无因子 → ``UnsupportedCapability``（不静默回退）。
+        """
+        unsupported = [
+            code.canonical
+            for code in codes
+            if code.sec_type not in _FACTOR_ENDPOINTS
+        ]
+        if unsupported:
+            raise UnsupportedCapability(
+                "Tushare 无复权因子（仅股票/ETF/LOF，实测见 doc-8 §3.1）："
+                + ", ".join(unsupported)
             )
+        frames = []
+        groups: dict[str, list[SecCode]] = {}
+        for code in codes:
+            groups.setdefault(_FACTOR_ENDPOINTS[code.sec_type], []).append(code)
+        for endpoint, group in groups.items():
+            raw = self._query(
+                endpoint,
+                ts_code=",".join(self._mapper.to_source(code) for code in group),
+                start_date=_to_ts_date(start),
+                end_date=_to_ts_date(end),
+            )
+            if raw.empty:
+                continue
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "code": raw["ts_code"],
+                        "date": _from_ts_date(raw["trade_date"]),
+                        "adj_factor": pd.to_numeric(raw["adj_factor"]),
+                    }
+                )
+            )
+        if not frames:
+            return _empty_factors()
         return (
-            pd.DataFrame(
-                {
-                    "code": raw["ts_code"],
-                    "date": _from_ts_date(raw["trade_date"]),
-                    "adj_factor": pd.to_numeric(raw["adj_factor"]),
-                }
-            )
+            pd.concat(frames, ignore_index=True)
             .sort_values(["code", "date"])
             .reset_index(drop=True)
         )
@@ -301,6 +325,16 @@ def _empty_bars() -> pd.DataFrame:
             "close": [],
             "volume": [],
             "amount": [],
+        }
+    )
+
+
+def _empty_factors() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "code": [],
+            "date": pd.Series([], dtype="datetime64[ns]"),
+            "adj_factor": [],
         }
     )
 

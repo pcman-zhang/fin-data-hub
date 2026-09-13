@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fin_data_hub.codes import SecCode
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, Source
 
 CostClass = Literal["free", "metered", "premium"]
 
@@ -32,66 +32,79 @@ class EndpointCapability:
 
 _DEFAULT = EndpointCapability()
 
-CAPABILITIES: dict[tuple[Source, str], EndpointCapability] = {
+CAPABILITIES: dict[tuple[Source, Capability], EndpointCapability] = {
     # Tushare：ts_code 支持逗号批量；限额随积分档变化，由限流器/预算配置控制
-    (Source.TUSHARE, "bars"): EndpointCapability(
+    (Source.TUSHARE, Capability.BARS): EndpointCapability(
         max_codes_per_call=None, cost_class="free"
     ),
-    (Source.TUSHARE, "fund_nav"): EndpointCapability(
+    (Source.TUSHARE, Capability.FUND_NAV): EndpointCapability(
         max_codes_per_call=None, cost_class="free"
     ),
-    (Source.TUSHARE, "adjust_factors"): EndpointCapability(
+    (Source.TUSHARE, Capability.ADJUST_FACTORS): EndpointCapability(
         max_codes_per_call=None, cost_class="free"
     ),
     # AkShare：各接口均为单标的形式
-    (Source.AKSHARE, "bars"): EndpointCapability(
+    (Source.AKSHARE, Capability.BARS): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
     ),
-    (Source.AKSHARE, "snapshot"): EndpointCapability(
+    (Source.AKSHARE, Capability.SNAPSHOT): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
     ),
-    (Source.AKSHARE, "fund_nav"): EndpointCapability(
+    (Source.AKSHARE, Capability.FUND_NAV): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
     ),
     # iFinD：NL 工具普遍支持多标的/多指标聚合（已抽验 stock/fund/edb）；
     # max_codes_per_call=50 是请求体积的安全上限，非接口限制
-    (Source.IFIND, "bars"): EndpointCapability(
+    (Source.IFIND, Capability.BARS): EndpointCapability(
         max_codes_per_call=50, supports_multi_symbol=True, cost_class="metered"
     ),
-    (Source.IFIND, "fund_nav"): EndpointCapability(
+    (Source.IFIND, Capability.FUND_NAV): EndpointCapability(
         max_codes_per_call=50, supports_multi_symbol=True, cost_class="metered"
     ),
-    (Source.IFIND, "edb"): EndpointCapability(
+    (Source.IFIND, Capability.EDB): EndpointCapability(
         max_indicators_per_call=None, supports_multi_symbol=True, cost_class="metered"
     ),
     # Fuyao：K 线单标的且窗口 ≤10 年；快照支持 thscodes 批量（50 为安全上限）
-    (Source.FUYAO, "bars"): EndpointCapability(
+    (Source.FUYAO, Capability.BARS): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
     ),
-    (Source.FUYAO, "snapshot"): EndpointCapability(
+    (Source.FUYAO, Capability.SNAPSHOT): EndpointCapability(
         max_codes_per_call=50, cost_class="free"
     ),
+    # BaoStock：K 线单代码（sh./sz. 前缀，映射层转换）；复权因子同样单代码
+    (Source.BAOSTOCK, Capability.BARS): EndpointCapability(
+        max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
+    ),
+    (Source.BAOSTOCK, Capability.ADJUST_FACTORS): EndpointCapability(
+        max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
+    ),
     # Wind：K 线单代码；快照单次 ≤50；EDB 精确代码可批量
-    (Source.WIND, "bars"): EndpointCapability(
+    (Source.WIND, Capability.BARS): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="premium"
     ),
-    (Source.WIND, "snapshot"): EndpointCapability(
+    (Source.WIND, Capability.SNAPSHOT): EndpointCapability(
         max_codes_per_call=50, cost_class="premium"
     ),
-    (Source.WIND, "edb"): EndpointCapability(
+    (Source.WIND, Capability.EDB): EndpointCapability(
         max_indicators_per_call=None, cost_class="premium"
     ),
 }
 
 
-def get_capability(source: Source | str, capability: str) -> EndpointCapability:
+def get_capability(
+    source: Source | str, capability: Capability | str
+) -> EndpointCapability:
     """返回能力元数据；未登记的组合返回默认值（不限代码数）。"""
-    return CAPABILITIES.get((Source(source), capability), _DEFAULT)
+    try:
+        key = (Source(source), Capability(capability))
+    except ValueError:
+        return _DEFAULT
+    return CAPABILITIES.get(key, _DEFAULT)
 
 
 def split_codes(
     source: Source | str,
-    capability: str,
+    capability: Capability | str,
     codes: list[SecCode],
 ) -> list[list[SecCode]]:
     """按能力上限把代码列表切成多个调用批次（保持原顺序）。"""

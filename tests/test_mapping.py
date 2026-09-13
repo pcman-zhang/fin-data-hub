@@ -46,3 +46,23 @@ def test_akshare_from_source_requires_venue_for_bare_code() -> None:
     mapper = get_mapper(Source.AKSHARE)
     with pytest.raises(UnknownSecurityError):
         mapper.from_source("600000")
+
+
+@pytest.mark.parametrize("source", [Source.TUSHARE, Source.WIND, Source.IFIND])
+def test_passthrough_covers_hk_us_and_indices(source: Source) -> None:
+    mapper = get_mapper(source)
+    for text in ("00700.HK", "AAPL.O", "SPX.GI", "885800.TI", "881155.WI"):
+        code = SecCode.parse(text, sec_type="stock" if text.endswith(".HK") else None)
+        assert mapper.to_source(code) == text
+
+
+def test_akshare_rejects_non_cn_venues() -> None:
+    from fin_data_hub.errors import UnsupportedCapability
+
+    mapper = get_mapper(Source.AKSHARE)
+    with pytest.raises(UnsupportedCapability):
+        mapper.to_source(SecCode.parse("AAPL.O"))
+    with pytest.raises(UnsupportedCapability):
+        mapper.to_source(SecCode.parse("SPX.GI"))
+    with pytest.raises(UnsupportedCapability):
+        mapper.to_source(SecCode.parse("00700.HK", sec_type="stock"))

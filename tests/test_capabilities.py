@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from fin_data_hub import FinDataHub, HubConfig, SecCode, Source
+from fin_data_hub import Capability, FinDataHub, HubConfig, SecCode, Source
 from fin_data_hub.capabilities import EndpointCapability, get_capability, split_codes
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 
@@ -49,7 +49,7 @@ def test_split_codes_boundaries() -> None:
 
 class AkshareLikeBarsAdapter(BaseAdapter):
     source = Source.AKSHARE
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
     def __init__(self) -> None:
         self.chunks: list[list[str]] = []
@@ -91,7 +91,7 @@ def test_facade_chunks_per_capability_and_merges() -> None:
 
 class WindLikeSnapshotAdapter(BaseAdapter):
     source = Source.WIND
-    capabilities = frozenset({BaseAdapter.CAP_SNAPSHOT})
+    capabilities = frozenset({Capability.SNAPSHOT})
 
     def __init__(self) -> None:
         self.chunks: list[int] = []

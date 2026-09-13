@@ -4,36 +4,35 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from enum import StrEnum
 
+from fin_data_hub.enums import SecType, Venue
 from fin_data_hub.errors import UnknownSecurityError
 
-
-class SecType(StrEnum):
-    """证券类型。"""
-
-    STOCK = "stock"
-    ETF = "etf"
-    LOF = "lof"
-    FUND = "fund"
-    INDEX = "index"
-
-
-#: 已实现类型推断的 venue（A 股相关市场）
-CN_VENUES = frozenset({"SH", "SZ", "BJ", "OF"})
+#: 已实现类型推断的 CN venue
+CN_VENUES = frozenset({Venue.SH, Venue.SZ, Venue.BJ, Venue.OF})
+#: 美股交易所（推断为股票）
+US_EXCHANGES = frozenset({Venue.O, Venue.N, Venue.A})
+#: 指数 venue（推断为指数）
+INDEX_VENUES = frozenset({Venue.GI, Venue.TI, Venue.WI, Venue.CSI})
 #: 预留 venue（格式层接受，但需显式指定 sec_type）
-RESERVED_VENUES = frozenset({"CSI", "TI", "WI", "HK", "US"})
-SUPPORTED_VENUES = CN_VENUES | RESERVED_VENUES
+RESERVED_VENUES = frozenset({Venue.HK})
+SUPPORTED_VENUES = (
+    CN_VENUES | US_EXCHANGES | INDEX_VENUES | RESERVED_VENUES
+)
 
 _NUMERIC_SYMBOL = re.compile(r"^\d{1,6}$")
 _ALNUM_SYMBOL = re.compile(r"^[A-Z0-9]{1,10}$")
 
 
-def infer_sec_type(venue: str, symbol: str) -> SecType:
+def infer_sec_type(venue: Venue, symbol: str) -> SecType:
     """按 venue + 代码段推断证券类型；无法识别时抛 ``UnknownSecurityError``。"""
-    if venue == "OF":
+    if venue == Venue.OF:
         return SecType.FUND
-    if venue == "SH":
+    if venue in US_EXCHANGES:
+        return SecType.STOCK
+    if venue in INDEX_VENUES:
+        return SecType.INDEX
+    if venue == Venue.SH:
         if symbol.startswith("6"):
             return SecType.STOCK
         if symbol.startswith(("000", "950")):
@@ -42,7 +41,7 @@ def infer_sec_type(venue: str, symbol: str) -> SecType:
             return SecType.LOF
         if symbol.startswith("5"):
             return SecType.ETF
-    if venue == "SZ":
+    if venue == Venue.SZ:
         if symbol.startswith(("00", "30")):
             return SecType.STOCK
         if symbol.startswith("15"):
@@ -51,7 +50,7 @@ def infer_sec_type(venue: str, symbol: str) -> SecType:
             return SecType.LOF
         if symbol.startswith("39"):
             return SecType.INDEX
-    if venue == "BJ" and symbol.startswith(("4", "8", "9")):
+    if venue == Venue.BJ and symbol.startswith(("4", "8", "9")):
         return SecType.STOCK
     raise UnknownSecurityError(f"无法推断证券类型: {symbol}.{venue}")
 
@@ -65,7 +64,7 @@ class SecCode:
     """
 
     symbol: str
-    venue: str
+    venue: Venue
     sec_type: SecType
 
     @classmethod
@@ -89,11 +88,13 @@ class SecCode:
             raise UnknownSecurityError(f"代码必须为 symbol.VENUE 形式: {value!r}")
 
         symbol_part, _, venue_part = raw.rpartition(".")
-        venue = venue_part.strip().upper()
-        if venue not in SUPPORTED_VENUES:
+        try:
+            venue = Venue(venue_part.strip().upper())
+        except ValueError as exc:
             raise UnknownSecurityError(
-                f"未知 venue: {venue_part!r}（支持 {sorted(SUPPORTED_VENUES)}）"
-            )
+                f"未知 venue: {venue_part!r}"
+                f"（支持 {sorted(v.value for v in SUPPORTED_VENUES)}）"
+            ) from exc
 
         symbol = symbol_part.strip().upper()
         if venue in CN_VENUES:

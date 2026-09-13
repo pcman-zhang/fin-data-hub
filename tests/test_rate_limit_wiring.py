@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-from fin_data_hub import FinDataHub, HubConfig, Source
+from fin_data_hub import Capability, FinDataHub, HubConfig, Source
 from fin_data_hub.errors import RateLimitTimeout
 from fin_data_hub.ratelimit import (
     DEFAULT_RATE_LIMITS,
@@ -126,7 +126,7 @@ def test_adapter_has_default_limiter() -> None:
 
 class TrackingAdapter(BaseAdapter):
     source = Source.TUSHARE
-    capabilities = frozenset({BaseAdapter.CAP_BARS})
+    capabilities = frozenset({Capability.BARS})
 
     def fetch_bars(self, codes, *, start, end, freq, adjust, fields):
         self._acquire("daily")

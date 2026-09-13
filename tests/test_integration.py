@@ -25,6 +25,7 @@ from fin_data_hub import (
     WindConfig,
 )
 from fin_data_hub.sources.akshare import AkShareAdapter
+from fin_data_hub.sources.baostock import BaoStockAdapter
 from fin_data_hub.sources.fuyao import FuyaoAdapter
 from fin_data_hub.sources.ifind import IfindAdapter
 from fin_data_hub.sources.registry import SourceRegistry
@@ -101,3 +102,15 @@ def test_fuyao_live_snapshot_and_bars() -> None:
         ["600519.SH"], start="2026-09-01", end="2026-09-11", source=Source.FUYAO
     )
     assert not bars.empty
+
+
+@pytest.mark.skipif(not _installed("baostock"), reason="需要 baostock 包与外网")
+def test_baostock_live_bars() -> None:
+    with BaoStockAdapter() as adapter:
+        hub = FinDataHub(HubConfig(), registry=SourceRegistry([adapter]))
+        bars = hub.get_bars(
+            ["600000.SH"], start="2026-09-01", end="2026-09-11", source=Source.BAOSTOCK
+        )
+        assert not bars.empty
+        assert bars.attrs["source"] == "baostock"
+        assert bars.attrs["currency"].isin(["CNY"]).all() if "currency" in bars.attrs else True

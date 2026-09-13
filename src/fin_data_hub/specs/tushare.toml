@@ -1,0 +1,44 @@
+[params.adjust]
+none = ""
+qfq = "qfq"
+hfq = "hfq"
+
+[params.date]
+format = "%Y%m%d"
+
+[response.bars]
+required = ["ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"]
+
+[response.bars.fields]
+code = { source = "ts_code", type = "code" }
+date = { source = "trade_date", type = "date", format = "%Y%m%d" }
+open = { source = "open", type = "float" }
+high = { source = "high", type = "float" }
+low = { source = "low", type = "float" }
+close = { source = "close", type = "float" }
+volume = { source = "vol", type = "float", factor = 100.0 }
+amount = { source = "amount", type = "float", factor = 1000.0 }
+
+[response.fund_nav]
+required = ["ts_code", "nav_date", "unit_nav", "accum_nav"]
+
+[response.fund_nav.fields]
+code = { source = "ts_code", type = "code" }
+date = { source = "nav_date", type = "date", format = "%Y%m%d" }
+unit_nav = { source = "unit_nav", type = "float" }
+accum_nav = { source = "accum_nav", type = "float" }
+
+[response.trade_calendar]
+required = ["cal_date", "is_open"]
+
+[response.trade_calendar.fields]
+date = { source = "cal_date", type = "date", format = "%Y%m%d" }
+is_open = { source = "is_open", type = "bool" }
+
+[response.adjust_factors]
+required = ["ts_code", "trade_date", "adj_factor"]
+
+[response.adjust_factors.fields]
+code = { source = "ts_code", type = "code" }
+date = { source = "trade_date", type = "date", format = "%Y%m%d" }
+adj_factor = { source = "adj_factor", type = "float" }

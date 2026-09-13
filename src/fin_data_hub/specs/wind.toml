@@ -1,0 +1,37 @@
+[params.adjust]
+none = "2"
+qfq = "0"
+hfq = "1"
+
+[response.bars]
+required = ["TIME", "OPEN", "MATCH", "HIGH", "LOW", "VOLUME", "TURNOVER"]
+
+[response.bars.fields]
+date = { source = "TIME", type = "date" }
+open = { source = "OPEN", type = "float" }
+high = { source = "HIGH", type = "float" }
+low = { source = "LOW", type = "float" }
+close = { source = "MATCH", type = "float" }
+volume = { source = "VOLUME", type = "float" }
+amount = { source = "TURNOVER", type = "float" }
+
+[response.snapshot]
+required = [
+    "最新交易日",
+    "最新成交价",
+    "前收盘价",
+    "今日开盘价",
+    "今日最高价",
+    "今日最低价",
+    "成交量",
+]
+
+[response.snapshot.fields]
+date = { source = "最新交易日", type = "date", format = "%Y%m%d" }
+last = { source = "最新成交价", type = "float" }
+prev_close = { source = "前收盘价", type = "float" }
+open = { source = "今日开盘价", type = "float" }
+high = { source = "今日最高价", type = "float" }
+low = { source = "今日最低价", type = "float" }
+volume = { source = "成交量", type = "float" }
+amount = { source = "成交额", type = "float" }

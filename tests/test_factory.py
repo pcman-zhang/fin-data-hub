@@ -64,7 +64,7 @@ def test_datahub_from_config_wires_registry(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "tushare", fake)
 
     hub = FinDataHub.from_config(HubConfig(tushare=TushareConfig(token="token")))
-    assert hub.registry.available() == ("tushare",)
+    assert "tushare" in hub.registry.available()
 
 
 def test_fuyao_registered_with_credentials() -> None:

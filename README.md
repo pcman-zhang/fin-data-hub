@@ -22,6 +22,7 @@ pip install "fin-data-hub[akshare]"   # AkShare
 pip install "fin-data-hub[ifind]"     # 同花顺 iFinD（含 httpx）
 pip install "fin-data-hub[wind]"      # Wind（含 httpx）
 pip install "fin-data-hub[fuyao]"     # Fuyao 同花顺金融数据API（含 httpx）
+pip install "fin-data-hub[baostock]"  # BaoStock 免费源
 ```
 
 按需安装对应数据源的 extras；不使用某源时无需安装其依赖。核心依赖仅 `pandas`。iFinD / Wind 通过厂商远端 MCP（HTTP JSON-RPC）接入，**不需要安装 WindPy / iFinDPy**。
@@ -111,6 +112,7 @@ hub = FinDataHub(config, registry=registry)
 - iFinD 的 K 线目前仅支持指数（`index_data`）；场外基金净值走 `get_fund_market_performance`（NL 聚合）。
 - iFinD 的 NL 工具普遍支持多标的/多指标聚合（已抽验 stock/fund/edb），库内合并为一次调用，不做逐标的拆分；单次 50 代码为请求体积的安全上限。
 - AkShare 无参考数据接口；各接口为单标的形式，批量请求由库自动拆分。
+- BaoStock：仅支持 SH/SZ（`sh.600000`/`sz.399006`，含指数）；原生复权不列入 Router 可信源；连接断开会自动重新 login（会话按代际 + 引用计数管理）。
 - Fuyao 一期：`get_snapshot`（批量）、`get_bars`（单标的，窗口 ≤10 年自动分块）、`get_reference`（stock/fund/index 列表）、`get_trade_calendar`（近一年窗口）；当前免费、动态限流（HTTP 429 / code=4001 退避重试）。
 - **Fuyao 原生复权不可用**：其预计算复权序列经对账异常（`doc-4`）。请求复权时 Router 自动组合「Fuyao 原始价 + Tushare 因子」合成（需配置 Tushare；见 doc-5）；直接调用适配器时仅支持 `adjust=None`。
 

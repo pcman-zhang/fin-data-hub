@@ -39,6 +39,13 @@ class FuyaoConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class BaostockConfig:
+    """BaoStock 无鉴权；``max_attempts`` 控制断线重登录重试次数。"""
+
+    max_attempts: int = 2
+
+
+@dataclass(frozen=True, slots=True)
 class AkShareConfig:
     """AkShare 无鉴权，仅保留占位以便统一配置。"""
 
@@ -59,6 +66,7 @@ class HubConfig:
     ifind: IfindConfig | None = None
     akshare: AkShareConfig = field(default_factory=AkShareConfig)
     fuyao: FuyaoConfig | None = None
+    baostock: BaostockConfig = field(default_factory=BaostockConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     #: 按源覆盖限流配置（键为 source 值，如 "ifind"）；未覆盖时用默认表

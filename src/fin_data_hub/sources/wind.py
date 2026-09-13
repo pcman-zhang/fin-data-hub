@@ -24,7 +24,7 @@ import pandas as pd
 
 from fin_data_hub.codes import SecCode, SecType
 from fin_data_hub.config import WindConfig
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, Source
 from fin_data_hub.errors import (
     MissingCredentialError,
     ResponseParseError,
@@ -122,7 +122,7 @@ def _unit_factor(label: str) -> float:
 
 class WindAdapter(BaseAdapter):
     source = Source.WIND
-    capabilities = frozenset({BaseAdapter.CAP_BARS, BaseAdapter.CAP_SNAPSHOT})
+    capabilities = frozenset({Capability.BARS, Capability.SNAPSHOT})
 
     def __init__(
         self,

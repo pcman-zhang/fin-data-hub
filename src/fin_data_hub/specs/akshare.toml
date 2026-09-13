@@ -1,0 +1,34 @@
+[params.adjust]
+none = ""
+qfq = "qfq"
+hfq = "hfq"
+
+[params.date]
+format = "%Y%m%d"
+
+[response.bars]
+required = ["日期", "开盘", "最高", "最低", "收盘", "成交量", "成交额"]
+
+[response.bars.fields]
+date = { source = "日期", type = "date" }
+open = { source = "开盘", type = "float" }
+high = { source = "最高", type = "float" }
+low = { source = "最低", type = "float" }
+close = { source = "收盘", type = "float" }
+volume = { source = "成交量", type = "float", factor = 100.0 }
+amount = { source = "成交额", type = "float" }
+
+[response.fund_nav]
+required = ["净值日期", "单位净值"]
+
+[response.fund_nav.fields]
+date = { source = "净值日期", type = "date" }
+unit_nav = { source = "单位净值", type = "float" }
+accum_nav = { source = "累计净值", type = "float" }
+daily_return = { source = "日增长率", type = "float" }
+
+[response.trade_calendar]
+required = ["trade_date"]
+
+[response.trade_calendar.fields]
+date = { source = "trade_date", type = "date" }

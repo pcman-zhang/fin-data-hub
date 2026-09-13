@@ -1,0 +1,61 @@
+[params.adjust]
+none = "none"
+
+[params.date]
+format = "%Y-%m-%d"
+
+[response.bars]
+required = [
+    "date_ms",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "turnover",
+]
+
+[response.bars.fields]
+date = { source = "date_ms", type = "date_ms" }
+open = { source = "open_price", type = "float" }
+high = { source = "high_price", type = "float" }
+low = { source = "low_price", type = "float" }
+close = { source = "close_price", type = "float" }
+volume = { source = "volume", type = "float" }
+amount = { source = "turnover", type = "float" }
+
+[response.snapshot]
+required = [
+    "thscode",
+    "last_price",
+    "open_price",
+    "high_price",
+    "low_price",
+    "prev_price",
+    "volume",
+    "turnover",
+]
+
+[response.snapshot.fields]
+code = { source = "thscode", type = "code" }
+last = { source = "last_price", type = "float" }
+open = { source = "open_price", type = "float" }
+high = { source = "high_price", type = "float" }
+low = { source = "low_price", type = "float" }
+prev_close = { source = "prev_price", type = "float" }
+volume = { source = "volume", type = "float" }
+amount = { source = "turnover", type = "float" }
+
+[response.adjustment_events]
+required = ["ex_date_ms", "dividend_per_share", "per_share_bonus"]
+
+[response.adjustment_events.fields]
+ex_date = { source = "ex_date_ms", type = "date_ms" }
+dividend_per_share = { source = "dividend_per_share", type = "float" }
+per_share_bonus = { source = "per_share_bonus", type = "float" }
+
+[response.trade_calendar]
+required = ["date"]
+
+[response.trade_calendar.fields]
+date = { source = "date", type = "date", format = "%Y%m%d" }

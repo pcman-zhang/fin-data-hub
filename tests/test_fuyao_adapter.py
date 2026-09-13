@@ -334,7 +334,7 @@ def test_missing_credential_raises() -> None:
 def test_capabilities_and_default_rate_limit() -> None:
     adapter, client = make_adapter(bars_handler([]))
     assert adapter.capabilities == frozenset(
-        {"bars", "snapshot", "reference", "trade_calendar"}
+        {"bars", "snapshot", "reference", "trade_calendar", "adjustment_events"}
     )
     assert DEFAULT_RATE_LIMITS[Source.FUYAO].rate == 2.0
     client.close()

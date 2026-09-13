@@ -9,7 +9,7 @@ from typing import ClassVar
 import pandas as pd
 
 from fin_data_hub.codes import SecCode
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, Source
 from fin_data_hub.ratelimit import RateLimiterSet
 from fin_data_hub.usage import UsageLedger
 
@@ -23,7 +23,7 @@ class BaseAdapter(ABC):
     """
 
     source: ClassVar[Source]
-    capabilities: ClassVar[frozenset[str]] = frozenset()
+    capabilities: ClassVar[frozenset[Capability]] = frozenset()
 
     _usage: UsageLedger | None = None
     _rate_limits: RateLimiterSet | None = None
@@ -37,13 +37,6 @@ class BaseAdapter(ABC):
         if limiter is not None:
             limiter.acquire(endpoint)
 
-    # 能力名常量，供 facade 与测试引用
-    CAP_BARS = "bars"
-    CAP_SNAPSHOT = "snapshot"
-    CAP_FUND_NAV = "fund_nav"
-    CAP_REFERENCE = "reference"
-    CAP_TRADE_CALENDAR = "trade_calendar"
-    CAP_ADJUST_FACTORS = "adjust_factors"
 
     def bind_usage(self, ledger: UsageLedger) -> None:
         """由门面注入调用台账；适配器在真实调用边界记录。"""
@@ -104,5 +97,14 @@ class BaseAdapter(ABC):
 
     def fetch_adjust_factors(
         self, codes: list[SecCode], *, start: str, end: str
+    ) -> pd.DataFrame:  # pragma: no cover - 抽象方法
+        raise NotImplementedError
+
+    def fetch_adjustment_events(
+        self,
+        codes: list[SecCode],
+        *,
+        start: str | None = None,
+        end: str | None = None,
     ) -> pd.DataFrame:  # pragma: no cover - 抽象方法
         raise NotImplementedError

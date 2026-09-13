@@ -23,7 +23,7 @@ import pandas as pd
 
 from fin_data_hub.codes import SecCode, SecType
 from fin_data_hub.config import IfindConfig
-from fin_data_hub.enums import Source
+from fin_data_hub.enums import Capability, Source
 from fin_data_hub.errors import (
     MissingCredentialError,
     ResponseParseError,
@@ -78,7 +78,7 @@ def _iso_date(value: str) -> str:
 
 class IfindAdapter(BaseAdapter):
     source = Source.IFIND
-    capabilities = frozenset({BaseAdapter.CAP_BARS, BaseAdapter.CAP_FUND_NAV})
+    capabilities = frozenset({Capability.BARS, Capability.FUND_NAV})
 
     def __init__(
         self,

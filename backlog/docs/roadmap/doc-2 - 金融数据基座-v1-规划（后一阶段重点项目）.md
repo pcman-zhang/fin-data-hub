@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 11:03'
+updated_date: '2026-09-13 11:36'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 
@@ -178,6 +178,21 @@ docker/                  # 镜像与 compose（单机）
   - **基金持仓/份额**：披露滞后，知识时间 = 公告日。
 - **标准字段**：`event_date` / `report_period`（事件时间）、`knowledge_date` / `publish_date`（知识时间）、`ingest_ts`、`version`、`is_latest`、`source`。
 - **查询语义**：`as_of` 过滤 `knowledge_date <= as_of` 后取每键最新版本；不传 `as_of` 即"当前最新"；更正不回写历史（append-only）。
+- **PIT 宇宙（Security Master 必须含退市标的）**：`as_of` 时点标的池 =
+  `list_date <= as_of AND (delist_date IS NULL OR delist_date > as_of)`；
+  - Security Master 必须覆盖 `L / P / D` 全部状态（含已退市），并保留 `list_date / delist_date`；
+  - **退市标的的行情/财务/分红/停牌等历史数据必须完整入库**（否则回测/成分还原存在幸存者偏差）；
+  - 名称变更（`namechange`）、ST 历史（`stock_st`）、停牌（`suspend_d`）、行业归属变更
+    （`index_member_all` in/out）按**生效区间**独立留痕，用于 as-of 时点还原；
+  - v0 已具备：`delist_list`（TASK-2.26）、停牌/ST 计划（TASK-2.29）、行业成分带 in/out（TASK-2.27）；
+    仍缺：名称变更历史（`namechange`）——需纳入事件接口或参考数据。
+- **成分/权重表也是 PIT**（防前视/幸存者偏差）：
+  - **区间型（成员进出）**：`in_date / out_date`（SCD2）；as-of 成分 =
+    `in_date <= as_of AND (out_date IS NULL OR out_date > as_of)`；申万行业成分（TASK-2.27）、
+    指数调整公告属此类；
+  - **快照型（定期权重）**：`trade_date <= as_of` 取**最近一期**（`index_weight` 月度，TASK-2.30）；
+  - **知识时间**：以公告/披露时间为准（生效日与公布日分离时用公布日 ≤ as_of，防前视）；
+  - 仅存快照、无历史区间的指数成分，可用月度快照差分补区间（需数据质量校验/对账）。
 - **保留策略**：全量保留 + `is_latest` 物化视图（存储成本可接受；对账/审计友好）。
 - **参照**：bitemporal（valid time + transaction time）、SCD2/6（Kimball）、Compustat/CRSP PIT 口径（as-first-reported vs as-restated）。
 

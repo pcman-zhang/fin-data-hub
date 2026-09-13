@@ -3,7 +3,7 @@ id: doc-8
 title: 复权数据对账说明（Reconciliation Guide）
 type: guide
 created_date: '2026-09-13 11:01'
-updated_date: '2026-09-13 11:03'
+updated_date: '2026-09-13 11:22'
 ---
 # 复权数据对账说明（Reconciliation Guide）
 
@@ -47,6 +47,16 @@ updated_date: '2026-09-13 11:03'
 | 指数 | ❌ 空 | ❌ 空 | ❌ 空 | 价格指数无需复权 |
 
 **结论**：Tushare 因子通道需**按资产类型选择接口**（股票 `adj_factor`；ETF/LOF `fund_adj`）；BaoStock 因子仅覆盖股票。
+
+**行情（bars）接口覆盖（实测 2026-09-13）**：
+
+| 资产类型 | Tushare | AkShare | BaoStock | 备注 |
+|---|---|---|---|---|
+| 股票 | `daily` ✅ | `stock_zh_a_hist` ✅ | ✅ | |
+| ETF | `fund_daily` ✅ | `fund_etf_hist_em` ✅ | ✅ | Tushare `daily` 对 ETF 返回 0 行 |
+| LOF | `fund_daily` ✅ | `fund_lof_hist_em` ✅ | ✅ | 同上 |
+| 指数 | `index_daily` ✅ | `index_zh_a_hist` ✅ | ✅ | Tushare 指数**无复权因子**（价格指数无需复权） |
+| 场外基金 | —（用净值） | —（用净值） | — | |
 
 ## 4. 结论对 Router 的影响
 

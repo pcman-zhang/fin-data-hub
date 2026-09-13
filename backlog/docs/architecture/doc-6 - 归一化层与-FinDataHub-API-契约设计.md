@@ -3,7 +3,7 @@ id: doc-6
 title: 归一化层与 FinDataHub API 契约设计
 type: specification
 created_date: '2026-09-13 10:28'
-updated_date: '2026-09-13 11:16'
+updated_date: '2026-09-13 11:38'
 ---
 # 归一化层与 FinDataHub API 契约设计
 
@@ -29,6 +29,7 @@ class FinDataHub:
     def get_snapshot(codes, *, fields=None, source=None, force=False, ttl=None) -> pd.DataFrame
     def get_fund_nav(codes, *, start=None, end=None, source=None, force=False, ttl=None) -> pd.DataFrame
     def get_reference(kind, *, source=None, force=False, ttl=None) -> pd.DataFrame
+    def get_security_info(codes, *, source=None, force=False, ttl=None) -> pd.DataFrame
     def get_trade_calendar(*, start, end, source=None, force=False, ttl=None) -> pd.DataFrame
     def stats() -> dict
 
@@ -84,7 +85,12 @@ class FinDataHub:
 | | `daily_return` | float64 | **百分比数值**（1.23 = +1.23%） |
 | reference(stock_list) | `code/name/list_date/market/industry` | str/datetime64/str | market ∈ SH/SZ/BJ；缺失为 None |
 | reference(fund_list) | `code/name/fund_type/management/list_date/market` | 同上 | |
+| reference(etf_list) | `code/name/fullname/index_code/index_name/setup_date/list_date/list_status/exchange/manager/custodian/mgt_fee/etf_type` | str/datetime64/float | 对照源 etf 基础信息 |
+| reference(delist_list) | `code/name/list_date/delist_date/market` | str/datetime64 | 退市标的列表 |
+| reference(industry_classify) | `index_code/name/level/industry_code/parent_code/is_pub/src` | str | 申万三级树；`parent_code` 引用上级 `industry_code` |
+| reference(industry_member) | `code/name/l1_code/l1_name/l2_code/l2_name/l3_code/l3_name/in_date/out_date/is_new` | str/datetime64 | 区间型 PIT（保留已剔除记录） |
 | reference(index_list) | `code/name/market/category/publisher/list_date` | 同上 | |
+| security_info | `code/name/sec_type/market/list_status/list_date/delist_date` | str/datetime64 | 按代码基础信息（股票/ETF/LOF/场外/指数） |
 | trade_calendar | `date/is_open` | datetime64[ns]/bool | 区间内逐日 |
 | adjust_factors（adapter 级） | `code/date/adj_factor` | float64 | 绝对累计因子（统一锚点，当前 Tushare） |
 | adjustment_events（adapter 级） | `code/ex_date/dividend_per_share/per_share_bonus` | float64 | 每股、税前 |
@@ -244,6 +250,8 @@ normalize(raw: pd.DataFrame, spec: ResponseSpec, *, source: Source, endpoint: st
   - spec 框架增强：`code` 字段可用 `mapper.from_source` 还原 canonical / 单标 `code=` 覆盖（响应无代码列时自动补 `code` 列）、`optional=true` 缺失置空、`bool` 兼容 `"1"/"0"` 与真值字符串；
   - 已切换 `normalize()`：Tushare（bars / fund_nav / trade_calendar / adjust_factors）、AkShare（bars / fund_nav）、Fuyao（bars / snapshot / adjustment_events；快照日期仍在 adapter 注入）；
   - **例外（保留 bespoke 映射）**：iFinD（markdown 文本 parser）；Wind（单位因子随响应 `unit` 元数据动态变化，保留 `_map_kline` / `_map_snapshot`）；AkShare/Fuyao/BaoStock 的交易日历为**派生结果**（开市日集合 → 区间逐日）非行映射。
+- **TASK-2.26 扩展（2026-09-13）**：新增 `get_security_info` 与 reference kinds `etf_list` / `delist_list`（契约只增不改）。
+- **TASK-2.27 扩展（2026-09-13）**：新增 reference kinds `industry_classify`（SW2021 L1/L2/L3 全量，511 条）与 `industry_member`（成分含历史：Y 5902 + N 2006，offset 分页）；`parent_code` 组装口径为上级 `industry_code`。
 - **阶段 C（已完成 2026-09-13）**：
   - BaoStock spec（bars / trade_calendar / adjust_factors）+ adapter 切换（因子基准行逻辑不变）；
   - HK/US/GI/TI/WI：CodeMap（`PassthroughMapper`）覆盖与不支持源的明确报错已有测试（`test_mapping.py`）；对应 adapter 端点实现前不预置 spec；

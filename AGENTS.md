@@ -3,6 +3,7 @@
 ## 项目性质（最重要）
 - 这是一个 **Python 库**，不是可执行程序/服务：提供可被其他程序 `import` 的模块，不要引入 CLI、常驻进程或调度器作为主入口。
 - 目标：聚合多源金融数据（Tushare / Wind / 同花顺 iFinD / AkShare 等公开源），对外提供统一查询接口。**不含持久化存储层**（不落库/不写文件）；缓存仅在库内内存维护（TTL + 可选 `force` 刷新）。
+- **阶段边界**：「无存储层」约束适用于 v0 库；后一阶段（里程碑 `m-0` / TASK-3）演进为带 PostgreSQL 的「金融数据基座 v1」（规划见 `doc-2`），届时相关约束按新阶段更新。
 - 任务与文档统一用 Backlog.md CLI 管理（见文末 Backlog 工作流；`backlog/` 下的文件不要手改）。项目已初始化，task 前缀 `task`，状态为 To Do / In Progress / Done。
 - 架构基线见 Backlog 文档 `doc-1`（`backlog doc view doc-1`）：统一 WindCode、显式 `source` 参数、配置注入、每源限流、并发安全、TTL 缓存 + `force`。
 

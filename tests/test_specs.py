@@ -6,10 +6,17 @@ from fin_data_hub.errors import ResponseParseError
 from fin_data_hub.schemas import (
     ADJUST_FACTOR_COLUMNS,
     ADJUSTMENT_EVENT_COLUMNS,
+    BALANCE_SHEET_COLUMNS,
     BARS_COLUMNS,
     CALENDAR_COLUMNS,
+    FINANCIAL_INDICATOR_COLUMNS,
+    INDEX_WEIGHT_COLUMNS,
+    IPO_COLUMNS,
+    NAMECHANGE_COLUMNS,
     NAV_COLUMNS,
     SNAPSHOT_COLUMNS,
+    ST_COLUMNS,
+    SUSPENSION_COLUMNS,
 )
 from fin_data_hub.specs import load_all_specs, load_spec, normalize, validate_specs
 
@@ -19,6 +26,9 @@ COVERAGE: dict[Source, set[Capability]] = {
         Capability.FUND_NAV,
         Capability.TRADE_CALENDAR,
         Capability.ADJUST_FACTORS,
+        Capability.INDEX_WEIGHTS,
+        Capability.FINANCIALS,
+        Capability.MARKET_EVENTS,
     },
     Source.AKSHARE: {
         Capability.BARS,
@@ -39,6 +49,12 @@ COVERAGE: dict[Source, set[Capability]] = {
     },
 }
 
+#: capability → spec response 块别名（一个 capability 对多个 kind 时）
+BLOCK_ALIASES: dict[Capability, tuple[str, ...]] = {
+    Capability.FINANCIALS: ("balance_sheet", "financial_indicator"),
+    Capability.MARKET_EVENTS: ("ipo", "suspension", "st", "namechange"),
+}
+
 #: endpoint → canonical schema 列（spec 目标列一致性校验）
 SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {
     "bars": BARS_COLUMNS,
@@ -46,6 +62,13 @@ SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {
     "fund_nav": NAV_COLUMNS,
     "trade_calendar": CALENDAR_COLUMNS,
     "adjust_factors": ADJUST_FACTOR_COLUMNS,
+    "index_weights": INDEX_WEIGHT_COLUMNS,
+    "balance_sheet": BALANCE_SHEET_COLUMNS,
+    "financial_indicator": FINANCIAL_INDICATOR_COLUMNS,
+    "ipo": IPO_COLUMNS,
+    "suspension": SUSPENSION_COLUMNS,
+    "st": ST_COLUMNS,
+    "namechange": NAMECHANGE_COLUMNS,
     "adjustment_events": ADJUSTMENT_EVENT_COLUMNS,
 }
 
@@ -69,9 +92,11 @@ def test_spec_coverage() -> None:
     for source, endpoints in COVERAGE.items():
         assert source in specs, f"缺少 {source} spec"
         for endpoint in endpoints:
-            assert endpoint.value in specs[source].responses, (
-                f"{source} 缺少 {endpoint} 映射"
-            )
+            blocks = BLOCK_ALIASES.get(endpoint, (endpoint.value,))
+            for block in blocks:
+                assert block in specs[source].responses, (
+                    f"{source} 缺少 {endpoint} 映射"
+                )
 
 
 def test_normalize_tushare_bars_units_and_dates() -> None:

@@ -42,3 +42,111 @@ required = ["ts_code", "trade_date", "adj_factor"]
 code = { source = "ts_code", type = "code" }
 date = { source = "trade_date", type = "date", format = "%Y%m%d" }
 adj_factor = { source = "adj_factor", type = "float" }
+
+[response.index_weights]
+required = ["index_code", "trade_date", "con_code", "weight"]
+
+[response.index_weights.fields]
+code = { source = "index_code", type = "code" }
+date = { source = "trade_date", type = "date", format = "%Y%m%d" }
+con_code = { source = "con_code", type = "str" }
+weight = { source = "weight", type = "float" }
+
+[response.balance_sheet]
+required = ["ts_code", "ann_date", "end_date"]
+
+[response.balance_sheet.fields]
+code = { source = "ts_code", type = "code" }
+ann_date = { source = "ann_date", type = "date", format = "%Y%m%d" }
+end_date = { source = "end_date", type = "date", format = "%Y%m%d" }
+report_type = { source = "report_type", type = "str" }
+total_assets = { source = "total_assets", type = "float" }
+total_cur_assets = { source = "total_cur_assets", type = "float" }
+money_cap = { source = "money_cap", type = "float" }
+accounts_receiv = { source = "accounts_receiv", type = "float" }
+inventories = { source = "inventories", type = "float" }
+fix_assets = { source = "fix_assets", type = "float" }
+cip = { source = "cip", type = "float" }
+intan_assets = { source = "intan_assets", type = "float" }
+goodwill = { source = "goodwill", type = "float" }
+total_liab = { source = "total_liab", type = "float" }
+total_cur_liab = { source = "total_cur_liab", type = "float" }
+st_borr = { source = "st_borr", type = "float" }
+lt_borr = { source = "lt_borr", type = "float" }
+acct_payable = { source = "acct_payable", type = "float" }
+notes_payable = { source = "notes_payable", type = "float" }
+contract_liab = { source = "contract_liab", type = "float" }
+total_hldr_eqy_exc_min_int = { source = "total_hldr_eqy_exc_min_int", type = "float" }
+minority_int = { source = "minority_int", type = "float" }
+
+[response.financial_indicator]
+required = ["ts_code", "ann_date", "end_date"]
+
+[response.financial_indicator.fields]
+code = { source = "ts_code", type = "code" }
+ann_date = { source = "ann_date", type = "date", format = "%Y%m%d" }
+end_date = { source = "end_date", type = "date", format = "%Y%m%d" }
+report_type = { source = "report_type", type = "str", optional = true }
+eps = { source = "eps", type = "float" }
+dt_eps = { source = "dt_eps", type = "float" }
+bps = { source = "bps", type = "float" }
+ocfps = { source = "ocfps", type = "float" }
+roe = { source = "roe", type = "float" }
+roe_waa = { source = "roe_waa", type = "float" }
+roe_dt = { source = "roe_dt", type = "float" }
+roa = { source = "roa", type = "float" }
+roic = { source = "roic", type = "float" }
+grossprofit_margin = { source = "grossprofit_margin", type = "float" }
+netprofit_margin = { source = "netprofit_margin", type = "float" }
+debt_to_assets = { source = "debt_to_assets", type = "float" }
+current_ratio = { source = "current_ratio", type = "float" }
+quick_ratio = { source = "quick_ratio", type = "float" }
+or_yoy = { source = "or_yoy", type = "float" }
+netprofit_yoy = { source = "netprofit_yoy", type = "float" }
+dt_netprofit_yoy = { source = "dt_netprofit_yoy", type = "float" }
+
+[response.ipo]
+required = ["ts_code", "name", "ipo_date"]
+
+[response.ipo.fields]
+code = { source = "ts_code", type = "code" }
+name = { source = "name", type = "str" }
+ipo_date = { source = "ipo_date", type = "date", format = "%Y%m%d" }
+issue_date = { source = "issue_date", type = "date", format = "%Y%m%d", optional = true }
+price = { source = "price", type = "float" }
+pe = { source = "pe", type = "float" }
+amount = { source = "amount", type = "float" }
+market_amount = { source = "market_amount", type = "float" }
+limit_amount = { source = "limit_amount", type = "float" }
+funds = { source = "funds", type = "float" }
+ballot = { source = "ballot", type = "float" }
+
+[response.suspension]
+required = ["ts_code", "trade_date"]
+
+[response.suspension.fields]
+code = { source = "ts_code", type = "code" }
+date = { source = "trade_date", type = "date", format = "%Y%m%d" }
+suspend_type = { source = "suspend_type", type = "str", optional = true }
+suspend_timing = { source = "suspend_timing", type = "str", optional = true }
+
+[response.st]
+required = ["ts_code", "trade_date"]
+
+[response.st.fields]
+code = { source = "ts_code", type = "code" }
+name = { source = "name", type = "str" }
+date = { source = "trade_date", type = "date", format = "%Y%m%d" }
+st_type = { source = "type", type = "str" }
+type_name = { source = "type_name", type = "str", optional = true }
+
+[response.namechange]
+required = ["ts_code", "name", "start_date"]
+
+[response.namechange.fields]
+code = { source = "ts_code", type = "code" }
+name = { source = "name", type = "str" }
+start_date = { source = "start_date", type = "date", format = "%Y%m%d" }
+end_date = { source = "end_date", type = "date", format = "%Y%m%d", optional = true }
+ann_date = { source = "ann_date", type = "date", format = "%Y%m%d", optional = true }
+change_reason = { source = "change_reason", type = "str", optional = true }

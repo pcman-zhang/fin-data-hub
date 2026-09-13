@@ -37,10 +37,13 @@ from fin_data_hub.schemas import (
     ADJUSTMENT_EVENT_COLUMNS,
     BARS_COLUMNS,
     CALENDAR_COLUMNS,
+    INDEX_WEIGHT_COLUMNS,
     NAV_COLUMNS,
     SECURITY_INFO_COLUMNS,
     SNAPSHOT_COLUMNS,
     finalize_frame,
+    financial_columns,
+    market_event_columns,
     reference_columns,
 )
 from fin_data_hub.sources.base import BaseAdapter
@@ -48,6 +51,12 @@ from fin_data_hub.sources.registry import SourceRegistry
 from fin_data_hub.usage import UsageLedger
 
 _Fields = Sequence[str] | None
+_EVENT_KEYS: dict[str, tuple[str, ...]] = {
+    "ipo": ("code", "ipo_date"),
+    "suspension": ("code", "date"),
+    "st": ("code", "date"),
+    "namechange": ("code", "start_date"),
+}
 
 
 def _with_cached_flag(df: pd.DataFrame, cached: bool) -> pd.DataFrame:
@@ -370,6 +379,164 @@ class FinDataHub:
                 columns=SECURITY_INFO_COLUMNS,
                 source=resolved,
                 cached=was_cached,
+            )
+
+        df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
+        return _with_cached_flag(df, was_cached)
+
+    # ------------------------------------------------------------ 指数权重
+    def get_index_weights(
+        self,
+        codes: str | SecCode | Sequence[str | SecCode],
+        *,
+        start: str,
+        end: str,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """指数成分与权重（月度快照；PIT：as-of 取最近一期）。"""
+        resolved = self._resolve_source(source)
+        scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
+        if not scodes:
+            raise ValueError("codes 不能为空")
+        adapter = self._adapter(resolved, Capability.INDEX_WEIGHTS)
+        key = (
+            "index_weights",
+            str(resolved),
+            tuple(sorted(c.canonical for c in scodes)),
+            start,
+            end,
+        )
+        was_cached = (not force) and self.cache.contains(key)
+
+        def load() -> pd.DataFrame:
+            frames = [
+                adapter.fetch_index_weights(chunk, start=start, end=end)
+                for chunk in split_codes(
+                    resolved, Capability.INDEX_WEIGHTS, scodes
+                )
+            ]
+            merged = _merge_frames(
+                frames,
+                dedupe_on=("code", "date", "con_code"),
+                sort_by=("code", "date", "con_code"),
+            )
+            return finalize_frame(
+                merged,
+                columns=INDEX_WEIGHT_COLUMNS,
+                source=resolved,
+                cached=was_cached,
+            )
+
+        df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
+        return _with_cached_flag(df, was_cached)
+
+    # -------------------------------------------------------------- 财务数据
+    def get_financials(
+        self,
+        codes: str | SecCode | Sequence[str | SecCode],
+        *,
+        kind: str,
+        start: str,
+        end: str,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """财务数据（核心 curated 列）：``balance_sheet`` / ``financial_indicator``。
+
+        ``start/end`` 按公告日（ann_date）过滤；公共 PIT 键
+        ``ann_date / end_date / report_type``（doc-2 §6.9 财务 append-only 版本）。
+        """
+        columns = financial_columns(kind)
+        resolved = self._resolve_source(source)
+        scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
+        if not scodes:
+            raise ValueError("codes 不能为空")
+        adapter = self._adapter(resolved, Capability.FINANCIALS)
+        key = (
+            "financials",
+            str(resolved),
+            kind,
+            tuple(sorted(c.canonical for c in scodes)),
+            start,
+            end,
+        )
+        was_cached = (not force) and self.cache.contains(key)
+
+        def load() -> pd.DataFrame:
+            frames = [
+                adapter.fetch_financials(chunk, kind=kind, start=start, end=end)
+                for chunk in split_codes(resolved, Capability.FINANCIALS, scodes)
+            ]
+            merged = _merge_frames(
+                frames,
+                dedupe_on=("code", "ann_date", "end_date", "report_type"),
+                sort_by=("code", "ann_date", "end_date"),
+            )
+            return finalize_frame(
+                merged, columns=columns, source=resolved, cached=was_cached
+            )
+
+        df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
+        return _with_cached_flag(df, was_cached)
+
+    # ------------------------------------------------------------ 市场事件
+    def get_market_events(
+        self,
+        *,
+        kind: str,
+        start: str,
+        end: str,
+        codes: str | SecCode | Sequence[str | SecCode] | None = None,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """市场事件：``ipo``（新股）/ ``suspension``（停复牌）/ ``st``（风险警示）。
+
+        ``codes`` 可选（None = 全市场）；``start/end`` 为事件日期区间。
+        """
+        columns = market_event_columns(kind)
+        resolved = self._resolve_source(source)
+        scodes = (
+            parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
+            if codes is not None
+            else []
+        )
+        adapter = self._adapter(resolved, Capability.MARKET_EVENTS)
+        key = (
+            "market_events",
+            str(resolved),
+            kind,
+            tuple(sorted(c.canonical for c in scodes)),
+            start,
+            end,
+        )
+        was_cached = (not force) and self.cache.contains(key)
+
+        def load() -> pd.DataFrame:
+            chunks = (
+                split_codes(resolved, Capability.MARKET_EVENTS, scodes)
+                if scodes
+                else [[]]
+            )
+            frames = [
+                adapter.fetch_market_events(
+                    kind=kind,
+                    start=start,
+                    end=end,
+                    codes=(chunk or None),
+                )
+                for chunk in chunks
+            ]
+            dedupe_on = _EVENT_KEYS.get(kind, ("code", "date"))
+            merged = _merge_frames(
+                frames, dedupe_on=dedupe_on, sort_by=dedupe_on
+            )
+            return finalize_frame(
+                merged, columns=columns, source=resolved, cached=was_cached
             )
 
         df = self.cache.get_or_load(key, load, force=force, ttl=ttl)

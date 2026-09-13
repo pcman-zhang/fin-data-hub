@@ -7,7 +7,18 @@ from fin_data_hub.errors import (
     SourceError,
     UnsupportedCapability,
 )
+from fin_data_hub.schemas import BALANCE_SHEET_COLUMNS, FINANCIAL_INDICATOR_COLUMNS
 from fin_data_hub.sources.tushare import TushareAdapter
+
+
+def _financial_row(columns: tuple[str, ...], **overrides):
+    row = {
+        column: 1.0
+        for column in columns
+        if column not in ("code", "currency")
+    }
+    row.update(overrides)
+    return row
 
 
 class FakeTushareApi:
@@ -187,6 +198,99 @@ class FakeTushareApi:
                 "in_date": ["20200101"],
                 "out_date": [None if is_new == "Y" else "20240101"],
                 "is_new": [is_new],
+            }
+        )
+
+    def new_share(self, **kwargs):
+        self.calls.append(("new_share", kwargs))
+        return pd.DataFrame(
+            {
+                "ts_code": ["920001.BJ"],
+                "sub_code": ["790001"],
+                "name": ["示例新股"],
+                "ipo_date": ["20260110"],
+                "issue_date": ["20260105"],
+                "amount": [1000.0],
+                "market_amount": [900.0],
+                "price": [10.0],
+                "pe": [22.5],
+                "limit_amount": [15000.0],
+                "funds": [9000.0],
+                "ballot": [0.03],
+            }
+        )
+
+    def namechange(self, **kwargs):
+        self.calls.append(("namechange", kwargs))
+        code = kwargs.get("ts_code", "600519.SH")
+        return pd.DataFrame(
+            {
+                "ts_code": [code, code],
+                "name": ["贵州茅台", "G茅台"],
+                "start_date": ["20061009", "20060525"],
+                "end_date": [None, "20061008"],
+                "ann_date": ["20060928", "20060522"],
+                "change_reason": ["其他", "其他"],
+            }
+        )
+
+    def suspend_d(self, **kwargs):
+        self.calls.append(("suspend_d", kwargs))
+        return pd.DataFrame(
+            {
+                "ts_code": ["600322.SH"],
+                "trade_date": ["20260105"],
+                "suspend_timing": [None],
+                "suspend_type": ["R"],
+            }
+        )
+
+    def stock_st(self, **kwargs):
+        self.calls.append(("stock_st", kwargs))
+        return pd.DataFrame(
+            {
+                "ts_code": ["000004.SZ"],
+                "name": ["*ST国华"],
+                "trade_date": ["20260105"],
+                "type": ["ST"],
+                "type_name": ["风险警示板"],
+            }
+        )
+
+    def balancesheet(self, **kwargs):
+        self.calls.append(("balancesheet", kwargs))
+        row = _financial_row(
+            BALANCE_SHEET_COLUMNS,
+            ts_code=kwargs["ts_code"],
+            ann_date="20260430",
+            end_date="20251231",
+            report_type="1",
+        )
+        return pd.DataFrame([row])
+
+    def fina_indicator(self, **kwargs):
+        self.calls.append(("fina_indicator", kwargs))
+        codes = kwargs["ts_code"].split(",")
+        return pd.DataFrame(
+            [
+                _financial_row(
+                    FINANCIAL_INDICATOR_COLUMNS,
+                    ts_code=code,
+                    ann_date="20260430",
+                    end_date="20251231",
+                )
+                for code in codes
+            ]
+        )
+
+    def index_weight(self, **kwargs):
+        self.calls.append(("index_weight", kwargs))
+        return pd.DataFrame(
+            {
+                "index_code": ["000300.SH", "000300.SH"],
+                "con_code": ["600519.SH", "300750.SZ"],
+                "trade_date": ["20260831", "20260831"],
+                "weight": [3.66, 3.20],
             }
         )
 
@@ -427,6 +531,179 @@ def test_fetch_security_info_routes_and_types() -> None:
         "000300.SH": "index",
     }
     assert str(df["list_date"].dtype) == "datetime64[ns]"
+
+
+def test_fetch_market_events_ipo() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_market_events(kind="ipo", start="20260101", end="20260131")
+    name, kwargs = fake.calls[-1]
+    assert name == "new_share"
+    assert kwargs["start_date"] == "20260101"
+    assert kwargs["limit"] == 1000
+    assert list(df.columns) == [
+        "code",
+        "name",
+        "ipo_date",
+        "issue_date",
+        "price",
+        "pe",
+        "amount",
+        "market_amount",
+        "limit_amount",
+        "funds",
+        "ballot",
+    ]
+    assert df.iloc[0]["price"] == 10.0
+    assert str(df["ipo_date"].dtype) == "datetime64[ns]"
+
+
+def test_fetch_market_events_suspension_with_codes() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_market_events(
+        kind="suspension",
+        start="20260101",
+        end="20260131",
+        codes=[SecCode.parse("600322.SH")],
+    )
+    assert fake.calls[-1][1]["ts_code"] == "600322.SH"
+    assert list(df.columns) == [
+        "code",
+        "date",
+        "suspend_type",
+        "suspend_timing",
+    ]
+    assert df.iloc[0]["suspend_type"] == "R"
+
+
+def test_fetch_market_events_st_local_filter() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_market_events(
+        kind="st",
+        start="20260101",
+        end="20260131",
+        codes=[SecCode.parse("000004.SZ")],
+    )
+    assert df.iloc[0]["st_type"] == "ST"
+    empty = adapter.fetch_market_events(
+        kind="st",
+        start="20260101",
+        end="20260131",
+        codes=[SecCode.parse("600519.SH")],
+    )
+    assert empty.empty
+    assert list(empty.columns) == [
+        "code",
+        "name",
+        "date",
+        "st_type",
+        "type_name",
+    ]
+
+
+def test_fetch_market_events_namechange_intervals() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_market_events(
+        kind="namechange",
+        start="20000101",
+        end="20261231",
+        codes=[SecCode.parse("600519.SH")],
+    )
+    name, kwargs = fake.calls[-1]
+    assert name == "namechange"
+    assert kwargs["ts_code"] == "600519.SH"
+    assert list(df.columns) == [
+        "code",
+        "name",
+        "start_date",
+        "end_date",
+        "ann_date",
+        "change_reason",
+    ]
+    first = df.iloc[0]
+    assert first["name"] == "G茅台"  # 排序后最早区间在前
+    assert first["start_date"] == pd.Timestamp("2006-05-25")
+    assert first["end_date"] == pd.Timestamp("2006-10-08")
+    assert pd.isna(df.iloc[-1]["end_date"])  # 当前名称区间无结束日
+    assert str(df["ann_date"].dtype) == "datetime64[ns]"
+
+
+def test_fetch_market_events_namechange_per_code_calls() -> None:
+    adapter, fake = make_adapter()
+    adapter.fetch_market_events(
+        kind="namechange",
+        start="20000101",
+        end="20261231",
+        codes=[SecCode.parse("600519.SH"), SecCode.parse("000001.SZ")],
+    )
+    calls = [k for n, k in fake.calls if n == "namechange"]
+    assert len(calls) == 2
+
+
+def test_fetch_market_events_unknown_kind_rejected() -> None:
+    adapter, _ = make_adapter()
+    with pytest.raises(UnsupportedCapability, match="event kind"):
+        adapter.fetch_market_events(kind="dividend", start="20260101", end="20260131")
+
+
+def test_fetch_financials_balance_sheet_per_code() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_financials(
+        [SecCode.parse("600000.SH"), SecCode.parse("000001.SZ")],
+        kind="balance_sheet",
+        start="20260101",
+        end="20260630",
+    )
+    assert [name for name, _ in fake.calls] == ["balancesheet", "balancesheet"]
+    assert df["total_assets"].tolist() == [1.0, 1.0]
+    assert str(df["ann_date"].dtype) == "datetime64[ns]"
+    assert set(df["code"]) == {"600000.SH", "000001.SZ"}
+
+
+def test_fetch_financials_indicator_batch() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_financials(
+        [SecCode.parse("600000.SH"), SecCode.parse("000001.SZ")],
+        kind="financial_indicator",
+        start="20260101",
+        end="20260630",
+    )
+    name, kwargs = fake.calls[-1]
+    assert name == "fina_indicator"
+    assert kwargs["ts_code"] == "600000.SH,000001.SZ"
+    assert df["roe"].tolist() == [1.0, 1.0]
+
+
+def test_fetch_financials_unknown_kind_rejected() -> None:
+    adapter, _ = make_adapter()
+    with pytest.raises(UnsupportedCapability, match="financial kind"):
+        adapter.fetch_financials(
+            [SecCode.parse("600000.SH")],
+            kind="cashflow",
+            start="20260101",
+            end="20260630",
+        )
+
+
+def test_fetch_index_weights() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_index_weights(
+        [SecCode.parse("000300.SH")], start="20260701", end="20260911"
+    )
+    name, kwargs = fake.calls[-1]
+    assert name == "index_weight"
+    assert kwargs["index_code"] == "000300.SH"
+    assert list(df.columns) == ["code", "date", "con_code", "weight"]
+    assert df["code"].tolist() == ["000300.SH", "000300.SH"]
+    assert df["weight"].tolist() == [3.2, 3.66]
+    assert str(df["date"].dtype) == "datetime64[ns]"
+
+
+def test_fetch_index_weights_rejects_non_index() -> None:
+    adapter, _ = make_adapter()
+    with pytest.raises(UnsupportedCapability, match="仅支持指数"):
+        adapter.fetch_index_weights(
+            [SecCode.parse("600000.SH")], start="20260701", end="20260911"
+        )
 
 
 def test_reference_industry_classify_tree() -> None:

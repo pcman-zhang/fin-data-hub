@@ -10,6 +10,7 @@ from fin_data_hub import (
     TushareConfig,
     UnsupportedCapability,
 )
+from fin_data_hub.schemas import FINANCIAL_COLUMNS, MARKET_EVENT_COLUMNS
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 
 
@@ -23,6 +24,9 @@ class FakeAdapter(BaseAdapter):
             Capability.REFERENCE,
             Capability.TRADE_CALENDAR,
             Capability.SECURITY_INFO,
+            Capability.INDEX_WEIGHTS,
+            Capability.FINANCIALS,
+            Capability.MARKET_EVENTS,
         }
     )
 
@@ -129,6 +133,53 @@ class FakeAdapter(BaseAdapter):
                 for code in codes
             ]
         )
+
+    def fetch_index_weights(self, codes, *, start, end):
+        self.calls.append(("index_weights", tuple(c.canonical for c in codes), start, end))
+        return pd.DataFrame(
+            [
+                {
+                    "code": code.canonical,
+                    "date": "2026-08-31",
+                    "con_code": "600519.SH",
+                    "weight": 3.66,
+                }
+                for code in codes
+            ]
+        )
+
+    def fetch_market_events(self, *, kind, start, end, codes=None):
+        self.calls.append(("market_events", kind, tuple(c.canonical for c in (codes or []))))
+        row = {column: None for column in MARKET_EVENT_COLUMNS[kind]}
+        row.update(
+            {
+                "code": "000004.SZ",
+                "name": "示例标的",
+                "date": "2026-01-05",
+                "ipo_date": "2026-01-05",
+                "issue_date": "2026-01-05",
+                "st_type": "ST",
+                "type_name": "风险警示板",
+            }
+        )
+        return pd.DataFrame([row])
+
+    def fetch_financials(self, codes, *, kind, start, end):
+        self.calls.append(("financials", kind, tuple(c.canonical for c in codes)))
+        row = {
+            column: 1.0
+            for column in FINANCIAL_COLUMNS[kind]
+            if column not in ("code", "currency")
+        }
+        row.update(
+            {
+                "code": codes[0].canonical,
+                "ann_date": "2026-04-30",
+                "end_date": "2025-12-31",
+                "report_type": "1",
+            }
+        )
+        return pd.DataFrame([row])
 
     def fetch_trade_calendar(self, *, start, end):
         self.calls.append(("calendar", start, end))
@@ -262,6 +313,50 @@ def test_security_info_schema_and_currency() -> None:
     ]
     assert df.iloc[0]["currency"] == "CNY"
     assert str(df["list_date"].dtype) == "datetime64[ns]"
+
+
+def test_index_weights_schema() -> None:
+    hub = make_hub(adapter=FakeAdapter())
+    df = hub.get_index_weights(
+        ["000300.SH"], start="20260701", end="20260911", source="tushare"
+    )
+    assert list(df.columns) == ["code", "date", "con_code", "weight"]
+    assert df.iloc[0]["code"] == "000300.SH"
+    assert df.iloc[0]["con_code"] == "600519.SH"
+    assert str(df["date"].dtype) == "datetime64[ns]"
+
+
+def test_market_events_schema_and_kind_validation() -> None:
+    hub = make_hub(adapter=FakeAdapter())
+    df = hub.get_market_events(
+        kind="st", start="20260101", end="20260131", source="tushare"
+    )
+    assert list(df.columns) == list(MARKET_EVENT_COLUMNS["st"])
+    assert df.iloc[0]["currency"] == "CNY"
+    nc = hub.get_market_events(
+        kind="namechange", start="20000101", end="20261231", source="tushare"
+    )
+    assert list(nc.columns) == list(MARKET_EVENT_COLUMNS["namechange"])
+    with pytest.raises(ValueError, match="event kind"):
+        hub.get_market_events(
+            kind="dividend", start="20260101", end="20260131", source="tushare"
+        )
+
+
+def test_financials_schema_and_kind_validation() -> None:
+    hub = make_hub(adapter=FakeAdapter())
+    df = hub.get_financials(
+        ["600519.SH"], kind="balance_sheet", start="20260101", end="20260630", source="tushare"
+    )
+    assert list(df.columns) == list(FINANCIAL_COLUMNS["balance_sheet"])
+    assert df.iloc[0]["total_assets"] == 1.0
+    assert df.iloc[0]["currency"] == "CNY"
+    assert str(df["ann_date"].dtype) == "datetime64[ns]"
+
+    with pytest.raises(ValueError, match="financial kind"):
+        hub.get_financials(
+            ["600519.SH"], kind="cashflow", start="20260101", end="20260630", source="tushare"
+        )
 
 
 def test_schema_missing_column_raises_parse_error() -> None:

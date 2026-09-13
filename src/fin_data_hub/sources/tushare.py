@@ -29,7 +29,12 @@ from fin_data_hub.errors import (
 )
 from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import default_rate_limiter_set
-from fin_data_hub.schemas import REFERENCE_COLUMNS, SECURITY_INFO_COLUMNS
+from fin_data_hub.schemas import (
+    FINANCIAL_COLUMNS,
+    MARKET_EVENT_COLUMNS,
+    REFERENCE_COLUMNS,
+    SECURITY_INFO_COLUMNS,
+)
 from fin_data_hub.sources.base import BaseAdapter
 from fin_data_hub.specs import load_spec, normalize
 
@@ -57,6 +62,8 @@ _SECURITY_INFO_FIELDS: dict[str, str] = {
     "index_basic": "ts_code,name,list_date,market",
 }
 _MEMBER_PAGE_SIZE = 3000
+_EVENT_PAGE_SIZE = 1000
+_MAX_PAGES = 50
 
 
 def _to_ts_date(value: str) -> str:
@@ -82,6 +89,9 @@ class TushareAdapter(BaseAdapter):
             Capability.REFERENCE,
             Capability.TRADE_CALENDAR,
             Capability.SECURITY_INFO,
+            Capability.INDEX_WEIGHTS,
+            Capability.FINANCIALS,
+            Capability.MARKET_EVENTS,
             Capability.ADJUST_FACTORS,
         }
     )
@@ -445,6 +455,213 @@ class TushareAdapter(BaseAdapter):
             .reset_index(drop=True)
         )
 
+    # ------------------------------------------------------------ 指数权重
+    def fetch_index_weights(
+        self, codes: list[SecCode], *, start: str, end: str
+    ) -> pd.DataFrame:
+        """指数成分与权重（月度快照；接口单指数，本方法逐指数调用）。"""
+        unsupported = [
+            code.canonical for code in codes if code.sec_type is not SecType.INDEX
+        ]
+        if unsupported:
+            raise UnsupportedCapability(
+                "Tushare index_weight 仅支持指数代码：" + ", ".join(unsupported)
+            )
+        frames = []
+        for code in codes:
+            raw = self._query(
+                "index_weight",
+                index_code=self._mapper.to_source(code),
+                start_date=_to_ts_date(start),
+                end_date=_to_ts_date(end),
+            )
+            if raw.empty:
+                continue
+            frames.append(
+                normalize(
+                    raw,
+                    self._spec.responses["index_weights"],
+                    source=self.source,
+                    mapper=self._mapper,
+                )
+            )
+        if not frames:
+            return pd.DataFrame(
+                {
+                    "code": [],
+                    "date": pd.Series([], dtype="datetime64[ns]"),
+                    "con_code": [],
+                    "weight": [],
+                }
+            )
+        return (
+            pd.concat(frames, ignore_index=True)
+            .sort_values(["code", "date", "con_code"])
+            .reset_index(drop=True)
+        )
+
+    # -------------------------------------------------------------- 财务数据
+    def fetch_financials(
+        self, codes: list[SecCode], *, kind: str, start: str, end: str
+    ) -> pd.DataFrame:
+        """财务数据（核心 curated 列）：``balance_sheet`` / ``financial_indicator``。
+
+        ``start/end`` 按**公告日**（ann_date）过滤；公共 PIT 键
+        ``ann_date / end_date / report_type``。``balancesheet`` 不支持逗号
+        多代码 → 逐代码调用；``fina_indicator`` 批量。
+        """
+        if kind not in FINANCIAL_COLUMNS:
+            raise UnsupportedCapability(
+                f"Tushare 不支持 financial kind={kind!r}"
+                f"（可选 {sorted(FINANCIAL_COLUMNS)}）"
+            )
+        frames = []
+        if kind == "balance_sheet":
+            for code in codes:
+                raw = self._query(
+                    "balancesheet",
+                    ts_code=self._mapper.to_source(code),
+                    start_date=_to_ts_date(start),
+                    end_date=_to_ts_date(end),
+                )
+                if raw.empty:
+                    continue
+                frames.append(
+                    normalize(
+                        raw,
+                        self._spec.responses["balance_sheet"],
+                        source=self.source,
+                        mapper=self._mapper,
+                    )
+                )
+        else:
+            raw = self._query(
+                "fina_indicator",
+                ts_code=",".join(self._mapper.to_source(code) for code in codes),
+                start_date=_to_ts_date(start),
+                end_date=_to_ts_date(end),
+            )
+            if not raw.empty:
+                frames.append(
+                    normalize(
+                        raw,
+                        self._spec.responses["financial_indicator"],
+                        source=self.source,
+                        mapper=self._mapper,
+                    )
+                )
+        if not frames:
+            return _empty_financials(kind)
+        return (
+            pd.concat(frames, ignore_index=True)
+            .sort_values(["code", "ann_date", "end_date"])
+            .reset_index(drop=True)
+        )
+
+    # ------------------------------------------------------------ 市场事件
+    def fetch_market_events(
+        self,
+        *,
+        kind: str,
+        start: str,
+        end: str,
+        codes: list[SecCode] | None = None,
+    ) -> pd.DataFrame:
+        """市场事件：``ipo``（new_share）/ ``suspension``（suspend_d）/ ``st``（stock_st）。
+
+        ``codes`` 可选：ipo/st 为本地过滤，suspension 为源端过滤；均按日期区间。
+        """
+        if kind not in MARKET_EVENT_COLUMNS:
+            raise UnsupportedCapability(
+                f"Tushare 不支持 event kind={kind!r}"
+                f"（可选 {sorted(MARKET_EVENT_COLUMNS)}）"
+            )
+        wanted = {code.canonical for code in codes} if codes else set()
+        if kind == "ipo":
+            raw = self._paged_query(
+                "new_share",
+                start_date=_to_ts_date(start),
+                end_date=_to_ts_date(end),
+            )
+            if raw.empty:
+                return _empty_events(kind)
+            frame = normalize(
+                raw, self._spec.responses["ipo"], source=self.source, mapper=self._mapper
+            )
+            if wanted:
+                frame = frame[frame["code"].isin(wanted)]
+            sort_by = ("code", "ipo_date")
+        elif kind == "suspension":
+            params: dict[str, Any] = {
+                "start_date": _to_ts_date(start),
+                "end_date": _to_ts_date(end),
+            }
+            if codes:
+                params["ts_code"] = ",".join(
+                    self._mapper.to_source(code) for code in codes
+                )
+            raw = self._paged_query("suspend_d", **params)
+            if raw.empty:
+                return _empty_events(kind)
+            frame = normalize(
+                raw,
+                self._spec.responses["suspension"],
+                source=self.source,
+                mapper=self._mapper,
+            )
+            sort_by = ("code", "date")
+        elif kind == "namechange":
+            # namechange 不支持逗号多代码 → 指定 codes 时逐代码
+            queries: list[dict[str, Any]] = []
+            if codes:
+                queries = [
+                    {"ts_code": self._mapper.to_source(code)} for code in codes
+                ]
+            else:
+                queries = [{}]
+            frames = []
+            for extra in queries:
+                raw = self._paged_query(
+                    "namechange",
+                    start_date=_to_ts_date(start),
+                    end_date=_to_ts_date(end),
+                    **extra,
+                )
+                if raw.empty:
+                    continue
+                frames.append(
+                    normalize(
+                        raw,
+                        self._spec.responses["namechange"],
+                        source=self.source,
+                        mapper=self._mapper,
+                    )
+                )
+            if not frames:
+                return _empty_events(kind)
+            return (
+                pd.concat(frames, ignore_index=True)
+                .sort_values(["code", "start_date"])
+                .reset_index(drop=True)
+            )
+        else:  # st（stock_st 按交易日，区间由接口支持）
+            raw = self._paged_query(
+                "stock_st",
+                start_date=_to_ts_date(start),
+                end_date=_to_ts_date(end),
+            )
+            if raw.empty:
+                return _empty_events(kind)
+            frame = normalize(
+                raw, self._spec.responses["st"], source=self.source, mapper=self._mapper
+            )
+            if wanted:
+                frame = frame[frame["code"].isin(wanted)]
+            sort_by = ("code", "date")
+        if frame.empty:
+            return _empty_events(kind)
+        return frame.sort_values(list(sort_by)).reset_index(drop=True)
+
     # ---------------------------------------------------------------- 日历
     def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:
         raw = self._query(
@@ -458,6 +675,24 @@ class TushareAdapter(BaseAdapter):
         ).sort_values("date")
 
     # ------------------------------------------------------------------ 内部
+    def _paged_query(
+        self, endpoint: str, *, page_size: int = _EVENT_PAGE_SIZE, **kwargs: Any
+    ) -> pd.DataFrame:
+        """按 ``limit/offset`` 分页取全量（带最大页数保护）。"""
+        pages = []
+        offset = 0
+        for _ in range(_MAX_PAGES):
+            raw = self._query(endpoint, limit=page_size, offset=offset, **kwargs)
+            if raw.empty:
+                break
+            pages.append(raw)
+            if len(raw) < page_size:
+                break
+            offset += len(raw)
+        if not pages:
+            return pd.DataFrame()
+        return pd.concat(pages, ignore_index=True)
+
     def _query(self, endpoint: str, **kwargs: Any) -> pd.DataFrame:
         fn = getattr(self._api, endpoint, None)
         if fn is None:
@@ -501,7 +736,29 @@ def _empty_factors() -> pd.DataFrame:
 
 
 def _empty_reference(columns: tuple[str, ...]) -> pd.DataFrame:
-    return pd.DataFrame({column: pd.Series(dtype=object) for column in columns})
+    # currency 由门面 finalize 阶段集中派生，适配器输出不含该列
+    return pd.DataFrame(
+        {
+            column: pd.Series(dtype=object)
+            for column in columns
+            if column != "currency"
+        }
+    )
+
+
+def _empty_financials(kind: str) -> pd.DataFrame:
+    frame = _empty_reference(FINANCIAL_COLUMNS[kind])
+    for column in ("ann_date", "end_date"):
+        frame[column] = frame[column].astype("datetime64[ns]")
+    return frame
+
+
+def _empty_events(kind: str) -> pd.DataFrame:
+    frame = _empty_reference(MARKET_EVENT_COLUMNS[kind])
+    for column in ("date", "ipo_date", "issue_date", "start_date", "end_date"):
+        if column in frame.columns:
+            frame[column] = frame[column].astype("datetime64[ns]")
+    return frame
 
 
 def _col(raw: pd.DataFrame, name: str) -> pd.Series:

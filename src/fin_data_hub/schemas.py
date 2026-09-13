@@ -122,13 +122,133 @@ SECURITY_INFO_COLUMNS = (
 )
 
 ADJUST_FACTOR_COLUMNS = ("code", "date", "adj_factor")
+#: 指数成分与权重（快照型 PIT：as-of 取最近一期）
+INDEX_WEIGHT_COLUMNS = ("code", "date", "con_code", "weight")
+
+#: 财务数据（核心 curated 列；公共 PIT 键 ann_date/end_date/report_type）
+BALANCE_SHEET_COLUMNS = (
+    "code",
+    "ann_date",
+    "end_date",
+    "report_type",
+    "total_assets",
+    "total_cur_assets",
+    "money_cap",
+    "accounts_receiv",
+    "inventories",
+    "fix_assets",
+    "cip",
+    "intan_assets",
+    "goodwill",
+    "total_liab",
+    "total_cur_liab",
+    "st_borr",
+    "lt_borr",
+    "acct_payable",
+    "notes_payable",
+    "contract_liab",
+    "total_hldr_eqy_exc_min_int",
+    "minority_int",
+    "currency",
+)
+FINANCIAL_INDICATOR_COLUMNS = (
+    "code",
+    "ann_date",
+    "end_date",
+    "report_type",
+    "eps",
+    "dt_eps",
+    "bps",
+    "ocfps",
+    "roe",
+    "roe_waa",
+    "roe_dt",
+    "roa",
+    "roic",
+    "grossprofit_margin",
+    "netprofit_margin",
+    "debt_to_assets",
+    "current_ratio",
+    "quick_ratio",
+    "or_yoy",
+    "netprofit_yoy",
+    "dt_netprofit_yoy",
+    "currency",
+)
+FINANCIAL_COLUMNS: dict[str, tuple[str, ...]] = {
+    "balance_sheet": BALANCE_SHEET_COLUMNS,
+    "financial_indicator": FINANCIAL_INDICATOR_COLUMNS,
+}
+
+
+def financial_columns(kind: str) -> tuple[str, ...]:
+    try:
+        return FINANCIAL_COLUMNS[kind]
+    except KeyError as exc:
+        raise ValueError(
+            f"未知 financial kind: {kind!r}（可选 {sorted(FINANCIAL_COLUMNS)}）"
+        ) from exc
+
+
+#: 市场事件（get_market_events）：ipo / suspension / st
+IPO_COLUMNS = (
+    "code",
+    "name",
+    "ipo_date",
+    "issue_date",
+    "price",
+    "pe",
+    "amount",
+    "market_amount",
+    "limit_amount",
+    "funds",
+    "ballot",
+    "currency",
+)
+SUSPENSION_COLUMNS = ("code", "date", "suspend_type", "suspend_timing", "currency")
+ST_COLUMNS = ("code", "name", "date", "st_type", "type_name", "currency")
+NAMECHANGE_COLUMNS = (
+    "code",
+    "name",
+    "start_date",
+    "end_date",
+    "ann_date",
+    "change_reason",
+    "currency",
+)
+MARKET_EVENT_COLUMNS: dict[str, tuple[str, ...]] = {
+    "ipo": IPO_COLUMNS,
+    "suspension": SUSPENSION_COLUMNS,
+    "st": ST_COLUMNS,
+    "namechange": NAMECHANGE_COLUMNS,
+}
+
+
+def market_event_columns(kind: str) -> tuple[str, ...]:
+    try:
+        return MARKET_EVENT_COLUMNS[kind]
+    except KeyError as exc:
+        raise ValueError(
+            f"未知 event kind: {kind!r}（可选 {sorted(MARKET_EVENT_COLUMNS)}）"
+        ) from exc
 ADJUSTMENT_EVENT_COLUMNS = (
     "code",
     "ex_date",
     "dividend_per_share",
     "per_share_bonus",
 )
-_DATE_COLUMNS = ("date", "ex_date", "obs_date", "list_date", "delist_date", "setup_date")
+_DATE_COLUMNS = (
+    "date",
+    "ex_date",
+    "obs_date",
+    "list_date",
+    "delist_date",
+    "setup_date",
+    "ann_date",
+    "end_date",
+    "ipo_date",
+    "issue_date",
+)
 
 
 def finalize_frame(

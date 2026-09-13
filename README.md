@@ -103,6 +103,9 @@ hub = FinDataHub(config, registry=registry)
 | `get_fund_nav` | ✅ | ✅ 场外基金 | — | ✅ 多基金合并 |
 | `get_reference` | ✅ 股票 / 基金 / ETF / 退市 / 申万分类 / 指数列表 | — | — | — |
 | `get_security_info` | ✅ 标的/ETF/基金/指数基础信息（按代码） | — | — | — |
+| `get_index_weights` | ✅ 指数成分与权重（月度快照） | — | — | — |
+| `get_financials` | ✅ 资产负债表 / 财务指标（核心列） | — | — | — |
+| `get_market_events` | ✅ 新股 / 停复牌 / ST 名单 / 名称变更 | — | — | — |
 | `get_trade_calendar` | ✅ | ✅ | — | — |
 | EDB 宏观指标 | — | — | ✅ 精确代码批量 | ✅ 多指标聚合 |
 | 债券行情 | — | — | ✅ 长区间 ≤90 天分块 | — |

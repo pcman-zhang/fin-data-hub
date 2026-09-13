@@ -46,6 +46,15 @@ CAPABILITIES: dict[tuple[Source, Capability], EndpointCapability] = {
     (Source.TUSHARE, Capability.SECURITY_INFO): EndpointCapability(
         max_codes_per_call=None, cost_class="free"
     ),
+    (Source.TUSHARE, Capability.INDEX_WEIGHTS): EndpointCapability(
+        max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
+    ),
+    (Source.TUSHARE, Capability.FINANCIALS): EndpointCapability(
+        max_codes_per_call=None, cost_class="free"
+    ),
+    (Source.TUSHARE, Capability.MARKET_EVENTS): EndpointCapability(
+        max_codes_per_call=None, cost_class="free"
+    ),
     # AkShare：各接口均为单标的形式
     (Source.AKSHARE, Capability.BARS): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"

@@ -95,6 +95,26 @@ class BaseAdapter(ABC):
     def fetch_security_info(self, codes: list[SecCode]) -> pd.DataFrame:  # pragma: no cover
         raise NotImplementedError
 
+    def fetch_index_weights(
+        self, codes: list[SecCode], *, start: str, end: str
+    ) -> pd.DataFrame:  # pragma: no cover - 抽象方法
+        raise NotImplementedError
+
+    def fetch_financials(
+        self, codes: list[SecCode], *, kind: str, start: str, end: str
+    ) -> pd.DataFrame:  # pragma: no cover - 抽象方法
+        raise NotImplementedError
+
+    def fetch_market_events(
+        self,
+        *,
+        kind: str,
+        start: str,
+        end: str,
+        codes: list[SecCode] | None = None,
+    ) -> pd.DataFrame:  # pragma: no cover - 抽象方法
+        raise NotImplementedError
+
     def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:
         raise NotImplementedError  # pragma: no cover
 

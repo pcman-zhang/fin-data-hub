@@ -243,6 +243,9 @@ def test_tushare_fetch_adjust_factors() -> None:
             "reference",
             "trade_calendar",
             "security_info",
+            "index_weights",
+            "financials",
+            "market_events",
             "adjust_factors",
         }
     )

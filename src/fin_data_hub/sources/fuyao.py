@@ -50,6 +50,13 @@ def _date_to_ms(value: str) -> int:
     return int(ts.timestamp() * 1000)
 
 
+def _iso_date(value: str) -> str:
+    text = str(value).strip().replace("-", "")
+    if len(text) != 8 or not text.isdigit():
+        raise ValueError(f"日期格式应为 YYYYMMDD 或 YYYY-MM-DD: {value!r}")
+    return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+
+
 def _ms_to_date(series: pd.Series) -> pd.Series:
     parsed = (
         pd.to_datetime(series, unit="ms", utc=True)
@@ -282,6 +289,49 @@ class FuyaoAdapter(BaseAdapter):
             }
         )
 
+    # ---------------------------------------------------- 复权事件（推导用）
+    def fetch_adjustment_events(
+        self,
+        codes: list[SecCode],
+        *,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> pd.DataFrame:
+        """公司行为事件流（复权因子推导输入；接口每次仅一个 thscode）。
+
+        返回 ``code / ex_date / dividend_per_share / per_share_bonus``。
+        因子推导需原始价（P_prev）与统一锚点，并须与 Tushare 逐事件对账
+        （doc-4、doc-2 §6.16）；本方法不注册为 Router 的 factor_source。
+        """
+        if not codes:
+            raise ValueError("codes 不能为空")
+        rows: list[dict] = []
+        for code in codes:
+            params: dict[str, Any] = {"thscode": code.canonical}
+            if start:
+                params["from"] = _iso_date(start)
+            if end:
+                params["to"] = _iso_date(end)
+            data = self._get(
+                "/api/a-share/corporate-actions/adjustment-factors", params
+            )
+            for item in data.get("item") or []:
+                rows.append(
+                    {
+                        "code": code.canonical,
+                        "ex_date": item["ex_date_ms"],
+                        "dividend_per_share": item.get("dividend_per_share", 0.0),
+                        "per_share_bonus": item.get("per_share_bonus", 0.0),
+                    }
+                )
+        if not rows:
+            return _empty_adjustment_events()
+        frame = pd.DataFrame(rows)
+        frame["ex_date"] = _ms_to_date(frame["ex_date"])
+        frame["dividend_per_share"] = pd.to_numeric(frame["dividend_per_share"])
+        frame["per_share_bonus"] = pd.to_numeric(frame["per_share_bonus"])
+        return frame.sort_values(["code", "ex_date"]).reset_index(drop=True)
+
     # ---------------------------------------------------------------- 日历
     def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:
         data = self._get("/api/a-share/calendar/trading-days")
@@ -344,6 +394,17 @@ class FuyaoAdapter(BaseAdapter):
             retry_on=(NetworkError, RateLimitError),
             sleep_fn=self._sleep_fn,
         )
+
+
+def _empty_adjustment_events() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "code": [],
+            "ex_date": pd.Series([], dtype="datetime64[ns]"),
+            "dividend_per_share": [],
+            "per_share_bonus": [],
+        }
+    )
 
 
 def _empty_bars() -> pd.DataFrame:

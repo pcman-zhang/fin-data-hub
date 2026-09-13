@@ -427,3 +427,74 @@ def test_rate_limit_error_retried() -> None:
     assert len(df) == 1
     assert calls["n"] == 2
     client.close()
+
+
+def test_adjustment_events_mapping_and_per_code_calls() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return envelope(
+            {
+                "thscode": "600519.SH",
+                "ticker": "600519",
+                "item": [
+                    {
+                        "ticker": "600519",
+                        "ex_date_ms": 1782403200000,
+                        "dividend_per_share": 28.02423,
+                        "per_share_bonus": 0,
+                    },
+                    {
+                        "ticker": "600519",
+                        "ex_date_ms": 1766073600000,
+                        "dividend_per_share": 23.957,
+                        "per_share_bonus": 0,
+                    },
+                ],
+            }
+        )
+
+    adapter, client = make_adapter(handler)
+    df = adapter.fetch_adjustment_events(
+        [SecCode.parse("600519.SH"), SecCode.parse("000001.SZ")],
+        start="2026-01-01",
+        end="2026-09-11",
+    )
+    assert len(requests) == 2  # 单标的接口 → 逐代码调用
+    assert requests[0].url.params["thscode"] == "600519.SH"
+    assert requests[0].url.params["from"] == "2026-01-01"
+    assert requests[0].url.params["to"] == "2026-09-11"
+    assert list(df.columns) == [
+        "code",
+        "ex_date",
+        "dividend_per_share",
+        "per_share_bonus",
+    ]
+    assert str(df["ex_date"].dtype) == "datetime64[ns]"
+    assert len(df) == 4
+    client.close()
+
+
+def test_adjustment_events_empty_and_missing_codes() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return envelope({"thscode": "600519.SH", "ticker": "600519", "item": []})
+
+    adapter, client = make_adapter(handler)
+    df = adapter.fetch_adjustment_events([SecCode.parse("600519.SH")])
+    assert df.empty
+    assert list(df.columns) == [
+        "code",
+        "ex_date",
+        "dividend_per_share",
+        "per_share_bonus",
+    ]
+    with pytest.raises(ValueError):
+        adapter.fetch_adjustment_events([])
+    client.close()
+
+
+def test_fuyao_is_not_router_factor_source() -> None:
+    adapter, client = make_adapter(bars_handler([]))
+    assert "adjust_factors" not in adapter.capabilities
+    client.close()

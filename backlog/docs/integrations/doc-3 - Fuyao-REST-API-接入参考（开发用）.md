@@ -3,7 +3,7 @@ id: doc-3
 title: Fuyao REST API 接入参考（开发用）
 type: specification
 created_date: '2026-09-13 09:03'
-updated_date: '2026-09-13 09:56'
+updated_date: '2026-09-13 10:17'
 ---
 # Fuyao REST API 接入参考（开发用）
 
@@ -161,4 +161,5 @@ updated_date: '2026-09-13 09:56'
 2. 平台复权口径以 **原始价 + 因子**为准（Tushare `adj_factor` 与理论一致，已验证）。
 3. Fuyao 的事件流可用于推导因子，但推导结果须**逐事件与 Tushare 对账**后使用。
 4. 建议向 Fuyao 反馈该数据质量问题（同日 OHLC 复权比值不一致）。
-5. **Hub 处置（v0）**：FuyaoAdapter 仅支持 `adjust=None`；`qfq/hfq` 抛 `UnsupportedCapability` 并提示改用 Tushare/Wind 或原始价 + 因子（TASK-2.20）。
+5. **Hub 处置（v0）**：FuyaoAdapter 仅支持 `adjust=None`；`qfq/hfq` 抛 `UnsupportedCapability`；复权由 Router 组合 raw（请求源）+ factor（Tushare）合成（TASK-2.20/2.21）。
+6. **事件流接口**：`FuyaoAdapter.fetch_adjustment_events(codes, start, end)` → `code/ex_date/dividend_per_share/per_share_bonus`（单标的逐次调用；推导因子需对账，TASK-2.19）。

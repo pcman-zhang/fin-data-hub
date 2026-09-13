@@ -2,7 +2,7 @@ import threading
 
 import pandas as pd
 
-from fin_data_hub import DataHub, HubConfig, Source
+from fin_data_hub import FinDataHub, HubConfig, Source
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 from fin_data_hub.sources.tushare import TushareAdapter
 from fin_data_hub.usage import BudgetConfig, UsageLedger
@@ -158,7 +158,7 @@ class TrackingAdapter(BaseAdapter):
 
 
 def test_facade_stats_include_cache_and_usage() -> None:
-    hub = DataHub(HubConfig(), registry=SourceRegistry([TrackingAdapter()]))
+    hub = FinDataHub(HubConfig(), registry=SourceRegistry([TrackingAdapter()]))
     hub.get_bars(["600000.SH"], start="20260101", end="20260131", source="tushare")
     stats = hub.stats()
     assert stats["usage"]["sources"]["tushare"]["calls"] == 1

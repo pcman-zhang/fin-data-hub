@@ -126,6 +126,7 @@ DEFAULT_RATE_LIMITS: dict[Source, RateLimitConfig] = {
     Source.AKSHARE: RateLimitConfig(rate=1.0, burst=1.0, timeout=30.0),
     Source.WIND: RateLimitConfig(rate=1.0, burst=1.0, timeout=30.0),
     Source.IFIND: RateLimitConfig(rate=2.0, burst=2.0, timeout=30.0),
+    Source.FUYAO: RateLimitConfig(rate=2.0, burst=2.0, timeout=30.0),
 }
 
 

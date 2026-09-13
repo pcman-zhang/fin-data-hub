@@ -12,3 +12,4 @@ class Source(StrEnum):
     WIND = "wind"
     IFIND = "ifind"
     AKSHARE = "akshare"
+    FUYAO = "fuyao"

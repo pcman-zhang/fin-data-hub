@@ -9,6 +9,7 @@
 - **配置注入**：Tushare token、Wind / iFinD 凭证由调用方通过配置对象传入；库不读取环境变量、全局配置或用户目录。
 - **能力驱动的请求合并**：按各源/端点上限自动分块（如单标的源逐代码、Wind 快照 ≤50、iFinD EDB 多指标聚合）并合并去重。
 - **每源限流**：令牌桶（QPS）在适配器调用边界生效，可按源覆盖；等待超时抛出 `RateLimitTimeout`。
+- **Router 跨源路由**：统一输出；缺字段 / 缺复权 / 主源失败时按策略补充（字段补全、raw + factor 复权合成、失败回退），结果带溯源（doc-5）。
 - **线程安全**：共享状态加锁、缓存 single-flight，避免并发重复请求消耗配额。
 - **内存缓存**：TTL + LRU + 字节预算，`force=True` 跳过缓存强制刷新。
 - **调用计量**：按源统计调用次数与估算成本、预算告警，`hub.stats()` 查看；跨进程汇总通过 `on_record` 回调。
@@ -20,6 +21,7 @@ pip install "fin-data-hub[tushare]"   # Tushare
 pip install "fin-data-hub[akshare]"   # AkShare
 pip install "fin-data-hub[ifind]"     # 同花顺 iFinD（含 httpx）
 pip install "fin-data-hub[wind]"      # Wind（含 httpx）
+pip install "fin-data-hub[fuyao]"     # Fuyao 同花顺金融数据API（含 httpx）
 ```
 
 按需安装对应数据源的 extras；不使用某源时无需安装其依赖。核心依赖仅 `pandas`。iFinD / Wind 通过厂商远端 MCP（HTTP JSON-RPC）接入，**不需要安装 WindPy / iFinDPy**。
@@ -29,7 +31,7 @@ pip install "fin-data-hub[wind]"      # Wind（含 httpx）
 ## 快速开始
 
 ```python
-from fin_data_hub import DataHub, HubConfig, Source
+from fin_data_hub import FinDataHub, HubConfig, Source
 from fin_data_hub.config import TushareConfig, WindConfig, IfindConfig
 
 config = HubConfig(
@@ -40,7 +42,7 @@ config = HubConfig(
 )
 
 # 按配置自动装配可用数据源（缺凭证/依赖的源会被跳过）
-hub = DataHub.from_config(config)
+hub = FinDataHub.from_config(config)
 
 # 日线行情：显式指定数据源
 bars = hub.get_bars(
@@ -74,7 +76,7 @@ from fin_data_hub.sources import SourceRegistry
 from fin_data_hub.sources.tushare import TushareAdapter
 
 registry = SourceRegistry([TushareAdapter(config.tushare)])
-hub = DataHub(config, registry=registry)
+hub = FinDataHub(config, registry=registry)
 ```
 
 ## 统一代码模型
@@ -109,6 +111,8 @@ hub = DataHub(config, registry=registry)
 - iFinD 的 K 线目前仅支持指数（`index_data`）；场外基金净值走 `get_fund_market_performance`（NL 聚合）。
 - iFinD 的 NL 工具普遍支持多标的/多指标聚合（已抽验 stock/fund/edb），库内合并为一次调用，不做逐标的拆分；单次 50 代码为请求体积的安全上限。
 - AkShare 无参考数据接口；各接口为单标的形式，批量请求由库自动拆分。
+- Fuyao 一期：`get_snapshot`（批量）、`get_bars`（单标的，窗口 ≤10 年自动分块）、`get_reference`（stock/fund/index 列表）、`get_trade_calendar`（近一年窗口）；当前免费、动态限流（HTTP 429 / code=4001 退避重试）。
+- **Fuyao 原生复权不可用**：其预计算复权序列经对账异常（`doc-4`）。请求复权时 Router 自动组合「Fuyao 原始价 + Tushare 因子」合成（需配置 Tushare；见 doc-5）；直接调用适配器时仅支持 `adjust=None`。
 
 ## 配置与凭证
 
@@ -175,6 +179,7 @@ python3 -m venv .venv
 - `FIN_DATA_HUB_TUSHARE_TOKEN`
 - `FIN_DATA_HUB_WIND_API_KEY`
 - `FIN_DATA_HUB_IFIND_TOKEN`
+- `FIN_DATA_HUB_FUYAO_API_KEY`
 
 架构设计见仓库 Backlog 文档 `doc-1`（`backlog doc view doc-1`）。
 

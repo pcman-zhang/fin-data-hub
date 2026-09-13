@@ -40,6 +40,9 @@ CAPABILITIES: dict[tuple[Source, str], EndpointCapability] = {
     (Source.TUSHARE, "fund_nav"): EndpointCapability(
         max_codes_per_call=None, cost_class="free"
     ),
+    (Source.TUSHARE, "adjust_factors"): EndpointCapability(
+        max_codes_per_call=None, cost_class="free"
+    ),
     # AkShare：各接口均为单标的形式
     (Source.AKSHARE, "bars"): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
@@ -60,6 +63,13 @@ CAPABILITIES: dict[tuple[Source, str], EndpointCapability] = {
     ),
     (Source.IFIND, "edb"): EndpointCapability(
         max_indicators_per_call=None, supports_multi_symbol=True, cost_class="metered"
+    ),
+    # Fuyao：K 线单标的且窗口 ≤10 年；快照支持 thscodes 批量（50 为安全上限）
+    (Source.FUYAO, "bars"): EndpointCapability(
+        max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
+    ),
+    (Source.FUYAO, "snapshot"): EndpointCapability(
+        max_codes_per_call=50, cost_class="free"
     ),
     # Wind：K 线单代码；快照单次 ≤50；EDB 精确代码可批量
     (Source.WIND, "bars"): EndpointCapability(

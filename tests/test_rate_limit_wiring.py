@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-from fin_data_hub import DataHub, HubConfig, Source
+from fin_data_hub import FinDataHub, HubConfig, Source
 from fin_data_hub.errors import RateLimitTimeout
 from fin_data_hub.ratelimit import (
     DEFAULT_RATE_LIMITS,
@@ -154,7 +154,7 @@ def test_facade_timeout_raises_rate_limit_timeout() -> None:
             "tushare": RateLimitConfig(rate=0.001, burst=1, timeout=0.01)
         }
     )
-    hub = DataHub(config, registry=SourceRegistry([TrackingAdapter()]))
+    hub = FinDataHub(config, registry=SourceRegistry([TrackingAdapter()]))
     hub.get_bars(["600000.SH"], start="20260101", end="20260131", source="tushare")
     # 令牌耗尽：不同请求键（绕过缓存）应因等待限流超时
     with pytest.raises(RateLimitTimeout):

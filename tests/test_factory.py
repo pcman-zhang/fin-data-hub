@@ -1,7 +1,15 @@
 import sys
 import types
 
-from fin_data_hub import DataHub, HubConfig, IfindConfig, Source, TushareConfig, WindConfig
+from fin_data_hub import (
+    FinDataHub,
+    FuyaoConfig,
+    HubConfig,
+    IfindConfig,
+    Source,
+    TushareConfig,
+    WindConfig,
+)
 from fin_data_hub.sources.factory import build_registry
 
 
@@ -55,5 +63,12 @@ def test_datahub_from_config_wires_registry(monkeypatch) -> None:
     fake.pro_api = lambda token: types.SimpleNamespace()
     monkeypatch.setitem(sys.modules, "tushare", fake)
 
-    hub = DataHub.from_config(HubConfig(tushare=TushareConfig(token="token")))
+    hub = FinDataHub.from_config(HubConfig(tushare=TushareConfig(token="token")))
     assert hub.registry.available() == ("tushare",)
+
+
+def test_fuyao_registered_with_credentials() -> None:
+    registry = build_registry(
+        HubConfig(fuyao=FuyaoConfig(api_key="key")), sources=[Source.FUYAO]
+    )
+    assert registry.available() == ("fuyao",)

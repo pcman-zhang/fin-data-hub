@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from fin_data_hub import DataHub, HubConfig, SecCode, Source
+from fin_data_hub import FinDataHub, HubConfig, SecCode, Source
 from fin_data_hub.capabilities import EndpointCapability, get_capability, split_codes
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 
@@ -75,7 +75,7 @@ class AkshareLikeBarsAdapter(BaseAdapter):
 
 def test_facade_chunks_per_capability_and_merges() -> None:
     adapter = AkshareLikeBarsAdapter()
-    hub = DataHub(HubConfig(), registry=SourceRegistry([adapter]))
+    hub = FinDataHub(HubConfig(), registry=SourceRegistry([adapter]))
     df = hub.get_bars(
         ["600002.SH", "600000.SH", "600001.SH"],
         start="20260101",
@@ -118,7 +118,7 @@ class WindLikeSnapshotAdapter(BaseAdapter):
 
 def test_facade_snapshot_chunks_at_50() -> None:
     adapter = WindLikeSnapshotAdapter()
-    hub = DataHub(HubConfig(), registry=SourceRegistry([adapter]))
+    hub = FinDataHub(HubConfig(), registry=SourceRegistry([adapter]))
     codes = [f"{600000 + i}.SH" for i in range(51)]
     df = hub.get_snapshot(codes, source="wind")
     assert adapter.chunks == [50, 1]
@@ -127,7 +127,7 @@ def test_facade_snapshot_chunks_at_50() -> None:
 
 
 def test_facade_rejects_empty_codes() -> None:
-    hub = DataHub(
+    hub = FinDataHub(
         HubConfig(), registry=SourceRegistry([AkshareLikeBarsAdapter()])
     )
     with pytest.raises(ValueError, match="codes"):

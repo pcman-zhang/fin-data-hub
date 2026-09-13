@@ -3,7 +3,7 @@ id: doc-3
 title: Fuyao REST API 接入参考（开发用）
 type: specification
 created_date: '2026-09-13 09:03'
-updated_date: '2026-09-13 09:04'
+updated_date: '2026-09-13 09:56'
 ---
 # Fuyao REST API 接入参考（开发用）
 
@@ -135,3 +135,30 @@ updated_date: '2026-09-13 09:04'
 5. **分页**：snapshot/list 循环 offset；search 上限 50
 6. **免费期**：当前不限累计次数，但需控制频率（动态限流）
 7. **归一化层**：本参考的字段映射将作为 TASK-2.18 映射 spec 的输入
+
+## 5. 复权数据口径与对账结论（2026-09-13 实测）
+
+**接口行为**：
+
+- `historical` 的 `adjust=forward|backward` 返回**预计算复权价**（非因子）。
+- `corporate-actions/adjustment-factors` 返回**原始公司行为事件**（`ex_date_ms`、`dividend_per_share`、`per_share_bonus`），不含因子，需自行推导；每次请求仅一个 thscode。
+
+**对账实验（600519.SH，2024-01-01 ~ 2026-09-11，654 个交易日）**：
+
+| 检查项 | 结果 |
+|---|---|
+| 原始收盘价（Tushare vs Fuyao `adjust=none`） | **完全一致**（最大差 0.0） |
+| Tushare `adj_factor` 事件乘数 vs 理论 `P_prev/(P_prev−D)` | 一致（2026-06-26：1.023667 vs 1.023668，仅舍入差） |
+| Fuyao `backward` ÷ (raw × Tushare adj_factor) | **非常数**：0.789~0.829（累计偏差约 27%） |
+| Fuyao 同日 OHLC 的 `bwd/raw` 比值 | **各字段不一致**（如 2024-09-24：open 6.578 / high 6.517 / low 6.593 / close 6.517） |
+| Fuyao `bwd` 内部 `close/open` vs raw 内部 | **被改变**（1.068096 → 1.058260） |
+| Fuyao 隐含因子日常波动 | 普通交易日亦波动，且与当日涨跌幅反向（疑似基于均价等非收盘基准） |
+| Fuyao 事件乘数 vs 理论 | 不一致（2026-06-26：1.02656 vs 1.02367） |
+
+**结论**：
+
+1. Fuyao 的预计算复权价**不符合"原始价 × 统一累计因子"的标准语义**，**不可作为复权对账基准**。
+2. 平台复权口径以 **原始价 + 因子**为准（Tushare `adj_factor` 与理论一致，已验证）。
+3. Fuyao 的事件流可用于推导因子，但推导结果须**逐事件与 Tushare 对账**后使用。
+4. 建议向 Fuyao 反馈该数据质量问题（同日 OHLC 复权比值不一致）。
+5. **Hub 处置（v0）**：FuyaoAdapter 仅支持 `adjust=None`；`qfq/hfq` 抛 `UnsupportedCapability` 并提示改用 Tushare/Wind 或原始价 + 因子（TASK-2.20）。

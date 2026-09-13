@@ -48,6 +48,7 @@ class TushareAdapter(BaseAdapter):
             BaseAdapter.CAP_FUND_NAV,
             BaseAdapter.CAP_REFERENCE,
             BaseAdapter.CAP_TRADE_CALENDAR,
+            BaseAdapter.CAP_ADJUST_FACTORS,
         }
     )
 
@@ -223,6 +224,38 @@ class TushareAdapter(BaseAdapter):
                 }
             )
         raise UnsupportedCapability(f"Tushare 不支持 reference kind={kind!r}")
+
+    # ------------------------------------------------------------ 复权因子
+    def fetch_adjust_factors(
+        self, codes: list[SecCode], *, start: str, end: str
+    ) -> pd.DataFrame:
+        """复权因子（``adj_factor``）：``code/date/adj_factor``。"""
+        ts_codes = [self._mapper.to_source(c) for c in codes]
+        raw = self._query(
+            "adj_factor",
+            ts_code=",".join(ts_codes),
+            start_date=_to_ts_date(start),
+            end_date=_to_ts_date(end),
+        )
+        if raw.empty:
+            return pd.DataFrame(
+                {
+                    "code": [],
+                    "date": pd.Series([], dtype="datetime64[ns]"),
+                    "adj_factor": [],
+                }
+            )
+        return (
+            pd.DataFrame(
+                {
+                    "code": raw["ts_code"],
+                    "date": _from_ts_date(raw["trade_date"]),
+                    "adj_factor": pd.to_numeric(raw["adj_factor"]),
+                }
+            )
+            .sort_values(["code", "date"])
+            .reset_index(drop=True)
+        )
 
     # ---------------------------------------------------------------- 日历
     def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:

@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from fin_data_hub import (
-    DataHub,
+    FinDataHub,
     HubConfig,
     ResponseParseError,
     Source,
@@ -125,9 +125,9 @@ class BarsOnlyAdapter(FakeAdapter):
     capabilities = frozenset({BaseAdapter.CAP_BARS})
 
 
-def make_hub(*, adapter: BaseAdapter | None = None, config: HubConfig | None = None) -> DataHub:
+def make_hub(*, adapter: BaseAdapter | None = None, config: HubConfig | None = None) -> FinDataHub:
     registry = SourceRegistry([adapter or FakeAdapter()])
-    return DataHub(config or HubConfig(), registry=registry)
+    return FinDataHub(config or HubConfig(), registry=registry)
 
 
 def test_get_bars_end_to_end() -> None:

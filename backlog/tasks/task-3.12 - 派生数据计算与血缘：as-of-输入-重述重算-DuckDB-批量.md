@@ -4,6 +4,7 @@ title: 派生数据计算与血缘：as-of 输入 / 重述重算 / DuckDB 批量
 status: To Do
 assignee: []
 created_date: '2026-09-13 08:50'
+updated_date: '2026-09-13 09:25'
 labels: []
 milestone: m-0
 dependencies:
@@ -26,3 +27,9 @@ ordinal: 33000
 - [ ] #3 DuckDB 批量计算接入；派生写角色按 schema 最小授权
 - [ ] #4 提交后读模型刷新与 Redis 代际失效联动；测试覆盖
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+复权因子推导（事件→累计因子）属派生管线；需与 Tushare adj_factor / Fuyao 预计算复权价对账（doc-2 §6.16）。
+<!-- SECTION:NOTES:END -->

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from fin_data_hub.enums import Source
 from fin_data_hub.ratelimit import RateLimitConfig
+from fin_data_hub.routing import RoutingConfig
 from fin_data_hub.usage import BudgetConfig
 
 
@@ -28,6 +29,13 @@ class WindConfig:
 @dataclass(frozen=True, slots=True)
 class IfindConfig:
     authorization: str | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class FuyaoConfig:
+    api_key: str | None = field(default=None, repr=False)
+    base_url: str = "https://fuyao.aicubes.cn"
+    max_attempts: int = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,8 +58,10 @@ class HubConfig:
     wind: WindConfig | None = None
     ifind: IfindConfig | None = None
     akshare: AkShareConfig = field(default_factory=AkShareConfig)
+    fuyao: FuyaoConfig | None = None
     cache: CacheConfig = field(default_factory=CacheConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     #: 按源覆盖限流配置（键为 source 值，如 "ifind"）；未覆盖时用默认表
     rate_limits: Mapping[str, RateLimitConfig] = field(default_factory=dict)
+    routing: RoutingConfig = field(default_factory=RoutingConfig)
     default_source: Source | None = None

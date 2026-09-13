@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 08:59'
+updated_date: '2026-09-13 10:11'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 
@@ -277,3 +277,12 @@ docker/                  # 镜像与 compose（单机）
 - **归一化仍适用**：代码、字段、单位、时间戳（毫秒精度/时区）、会话状态；不产生知识时间版本。
 - **延迟统计**：端到端采样（源调用 → 归一化 → 返回），按 source/endpoint/时间窗输出 **p99 / mean**（可扩展 p50/p95）；复用 v0 UsageLedger 的 latency 记录并扩展分位数；接入 WebUI/指标与阈值告警。
 - **边界**：高频透传不改变"行情类入库、事件类版本化"的主线；若未来高频需入库，另立设计与保留策略。
+
+### 6.16 复权口径：raw + factor（2026-09-13 决策）
+
+- **实测确认**：Fuyao `historical` 的 `adjust` 返回**预计算复权价**；因子需从 `corporate-actions` 事件（`dividend_per_share` / `per_share_bonus`）推导；Tushare 提供 `adj_factor` 可直接使用。
+- **平台口径**：行情表存**原始价**；单独存**复权因子/公司行为事件**（版本化、PIT）；复权价在读取时按 `as-of` 与请求的 `adjust` 计算，不落全量 qfq/hfq 快照。
+- **推导与对账**：Fuyao 事件 → 累计因子按文档化约定推导；上线前与 Tushare `adj_factor` 及 Fuyao 预计算复权价交叉对账（阈值内）。
+- **Hub 接口**：新增 `fetch_adjust_factors`（Tushare `adj_factor` / Fuyao `corporate-actions`），见 TASK-2.19。
+- **Hub 处置（2026-09-13）**：Fuyao 适配器不提供原生复权；**Router 层**按策略组合 raw（请求源）+ factor（默认 Tushare）合成复权价，可信源走原生复权（doc-5、TASK-2.21）。
+- **对账结论（2026-09-13 实测）**：原始价两源完全一致；Tushare `adj_factor` 与理论乘数一致；**Fuyao 预计算复权价不符合"原始价 × 统一因子"语义**（同日 OHLC 比值不一致、内部比例被改变、隐含因子日常波动），**不可作为复权对账基准**；平台以原始价 + 因子为准，Fuyao 事件推导需逐事件与 Tushare 对账。证据见 doc-3 §5。

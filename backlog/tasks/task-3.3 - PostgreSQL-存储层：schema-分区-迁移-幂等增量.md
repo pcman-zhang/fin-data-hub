@@ -4,7 +4,7 @@ title: TimescaleDB 存储层：schema / 分区 / 迁移 / 幂等增量
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 08:56'
+updated_date: '2026-09-13 09:25'
 labels: []
 milestone: m-0
 dependencies:
@@ -25,6 +25,7 @@ ordinal: 22000
 - [ ] #2 迁移脚本可版本化升级/回滚
 - [ ] #3 关键查询（按标的+日期、按域）走索引且性能达标
 - [ ] #4 支持用户提供历史数据文件（Parquet/CSV）幂等导入
+- [ ] #5 行情存原始价 + 复权因子/事件（版本化、PIT）；复权价读取时按 as-of 计算（不落 qfq/hfq 快照）
 <!-- AC:END -->
 
 ## Implementation Notes

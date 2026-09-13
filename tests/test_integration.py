@@ -16,7 +16,8 @@ import os
 import pytest
 
 from fin_data_hub import (
-    DataHub,
+    FinDataHub,
+    FuyaoConfig,
     HubConfig,
     IfindConfig,
     Source,
@@ -24,6 +25,7 @@ from fin_data_hub import (
     WindConfig,
 )
 from fin_data_hub.sources.akshare import AkShareAdapter
+from fin_data_hub.sources.fuyao import FuyaoAdapter
 from fin_data_hub.sources.ifind import IfindAdapter
 from fin_data_hub.sources.registry import SourceRegistry
 from fin_data_hub.sources.tushare import TushareAdapter
@@ -34,6 +36,7 @@ pytestmark = pytest.mark.integration
 TUSHARE_TOKEN = os.environ.get("FIN_DATA_HUB_TUSHARE_TOKEN")
 WIND_API_KEY = os.environ.get("FIN_DATA_HUB_WIND_API_KEY")
 IFIND_TOKEN = os.environ.get("FIN_DATA_HUB_IFIND_TOKEN")
+FUYAO_API_KEY = os.environ.get("FIN_DATA_HUB_FUYAO_API_KEY")
 
 
 def _installed(name: str) -> bool:
@@ -46,7 +49,7 @@ def _installed(name: str) -> bool:
 )
 def test_tushare_live_bars() -> None:
     config = HubConfig(tushare=TushareConfig(token=TUSHARE_TOKEN))
-    hub = DataHub(config, registry=SourceRegistry([TushareAdapter(config.tushare)]))
+    hub = FinDataHub(config, registry=SourceRegistry([TushareAdapter(config.tushare)]))
     df = hub.get_bars(
         ["600000.SH"], start="2026-09-01", end="2026-09-11", source=Source.TUSHARE
     )
@@ -57,7 +60,7 @@ def test_tushare_live_bars() -> None:
 
 @pytest.mark.skipif(not _installed("akshare"), reason="需要 akshare 包与外网")
 def test_akshare_live_bars() -> None:
-    hub = DataHub(HubConfig(), registry=SourceRegistry([AkShareAdapter()]))
+    hub = FinDataHub(HubConfig(), registry=SourceRegistry([AkShareAdapter()]))
     df = hub.get_bars(
         ["600000.SH"], start="2026-09-01", end="2026-09-11", source=Source.AKSHARE
     )
@@ -68,7 +71,7 @@ def test_akshare_live_bars() -> None:
 @pytest.mark.skipif(not WIND_API_KEY, reason="需要 FIN_DATA_HUB_WIND_API_KEY")
 def test_wind_live_bars() -> None:
     config = HubConfig(wind=WindConfig(api_key=WIND_API_KEY))
-    hub = DataHub(config, registry=SourceRegistry([WindAdapter(config.wind)]))
+    hub = FinDataHub(config, registry=SourceRegistry([WindAdapter(config.wind)]))
     df = hub.get_bars(
         ["600519.SH"], start="2026-09-09", end="2026-09-11", source=Source.WIND
     )
@@ -79,9 +82,22 @@ def test_wind_live_bars() -> None:
 @pytest.mark.skipif(not IFIND_TOKEN, reason="需要 FIN_DATA_HUB_IFIND_TOKEN")
 def test_ifind_live_index_bars() -> None:
     config = HubConfig(ifind=IfindConfig(authorization=IFIND_TOKEN))
-    hub = DataHub(config, registry=SourceRegistry([IfindAdapter(config.ifind)]))
+    hub = FinDataHub(config, registry=SourceRegistry([IfindAdapter(config.ifind)]))
     df = hub.get_bars(
         ["000300.SH"], start="2026-09-01", end="2026-09-11", source=Source.IFIND
     )
     assert not df.empty
     assert df.attrs["source"] == "ifind"
+
+
+@pytest.mark.skipif(not FUYAO_API_KEY, reason="需要 FIN_DATA_HUB_FUYAO_API_KEY")
+def test_fuyao_live_snapshot_and_bars() -> None:
+    config = HubConfig(fuyao=FuyaoConfig(api_key=FUYAO_API_KEY))
+    hub = FinDataHub(config, registry=SourceRegistry([FuyaoAdapter(config.fuyao)]))
+    snapshot = hub.get_snapshot(["600519.SH"], source=Source.FUYAO)
+    assert not snapshot.empty
+    assert snapshot.attrs["source"] == "fuyao"
+    bars = hub.get_bars(
+        ["600519.SH"], start="2026-09-01", end="2026-09-11", source=Source.FUYAO
+    )
+    assert not bars.empty

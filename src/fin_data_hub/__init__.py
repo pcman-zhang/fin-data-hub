@@ -6,6 +6,7 @@ from fin_data_hub.codes import SecCode, SecType, parse_codes
 from fin_data_hub.config import (
     AkShareConfig,
     CacheConfig,
+    FuyaoConfig,
     HubConfig,
     IfindConfig,
     TushareConfig,
@@ -23,7 +24,8 @@ from fin_data_hub.errors import (
     UnknownSecurityError,
     UnsupportedCapability,
 )
-from fin_data_hub.facade import DataHub
+from fin_data_hub.facade import FinDataHub
+from fin_data_hub.routing import RoutingConfig
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 from fin_data_hub.usage import BudgetAlert, BudgetConfig, UsageLedger, UsageRecord
 
@@ -33,14 +35,16 @@ __all__ = [
     "SecCode",
     "SecType",
     "parse_codes",
-    "DataHub",
+    "FinDataHub",
     "HubConfig",
     "CacheConfig",
     "TushareConfig",
     "WindConfig",
     "IfindConfig",
     "AkShareConfig",
+    "FuyaoConfig",
     "MemoryCache",
+    "RoutingConfig",
     "BaseAdapter",
     "SourceRegistry",
     "BudgetConfig",

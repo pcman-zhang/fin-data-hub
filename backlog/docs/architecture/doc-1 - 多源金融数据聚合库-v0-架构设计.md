@@ -3,7 +3,7 @@ id: doc-1
 title: 多源金融数据聚合库 v0 架构设计
 type: specification
 created_date: '2026-09-12 10:51'
-updated_date: '2026-09-12 13:22'
+updated_date: '2026-09-13 10:11'
 ---
 # 架构设计：多源金融数据聚合库 v0
 
@@ -35,6 +35,7 @@ updated_date: '2026-09-12 13:22'
 | Tushare | 是 | `stock_basic`(600000.SH / 920002.BJ)、`fund_basic`(510300.SH / 000001.OF)、`index_basic`(000300.SH) 均正常返回 |
 | iFinD | 是 | MCP 工具入参接受 WindCode（实测 `index_data` 000300.SH、基金净值 000001.OF）；MCP HTTP 直连已通过 `initialize`/`tools/list` 验证 |
 | Wind | 是（原生 WindCode） | MCP 工具入参接受 WindCode；`https://mcp.wind.com.cn/vserver_*/mcp/` HTTP 直连已通过 `initialize` 验证（stateless SSE，`Bearer <api_key>`） |
+| Fuyao | 是（thscode 与 canonical 一致） | REST 直连实测通过（快照/日线/日历/代码表） |
 | AkShare | 否 | 各接口参数不统一：`stock_zh_a_hist(symbol='000001')`、`fund_etf_hist_em(symbol='159707')`、`fund_open_fund_info_em(symbol='710001')`、`stock_zh_index_daily_em(symbol='csi931151')` |
 
 结论：canonical 采用 WindCode；映射层主要服务 AkShare；Tushare / iFinD / Wind 近似直通（iFinD、Wind 经远端 MCP 接入，见 3.3），但指数与别名个例仍需规则表。
@@ -52,7 +53,7 @@ updated_date: '2026-09-12 13:22'
 ### 3.1 门面 API（草案）
 
 ```python
-class DataHub:
+class FinDataHub:
     def get_bars(self, codes, start, end, freq="1d", adjust=None,
                  source=Source.TUSHARE, fields=None, force=False, ttl=None) -> pd.DataFrame
     def get_snapshot(self, codes, fields=None, source=..., force=False) -> pd.DataFrame
@@ -61,6 +62,7 @@ class DataHub:
     def get_trade_calendar(self, start, end, source=..., force=False) -> pd.DataFrame
 ```
 
+- 对外门面为 `FinDataHub`。
 - `source` 显式为必填参数（`Source` 枚举：`TUSHARE` / `WIND` / `IFIND` / `AKSHARE`），避免来源混淆；预留 `HubConfig.default_source` 作为简写。
 - 统一返回 `pandas.DataFrame`，规范列由 `schemas.py` 定义；`df.attrs` 携带 `source / cached / fetched_at / adjust` 等元信息。
 - 规范列采用统一数据模型：序列类输出长表 `symbol / obs_date / value / unit / source`；K 线/快照以统一列名映射（OHLCV 等），不做跨源裸字段拼接。
@@ -71,6 +73,7 @@ class DataHub:
 
 - `SourceRegistry`：`source → adapter` 实例注册表。
 - adapter 实现 `BaseAdapter`（Protocol/ABC）；能力缺失抛 `UnsupportedCapability`，错误信息中列出可用 source。
+- **Router 层（doc-5）**：统一输出与跨源路由——主源执行、完整性检测、按需补充（字段补全 / 复权合成 / 失败回退）、溯源标注；`RoutingConfig` 可配置因子源、可信原生复权源与回退链。
 
 ### 3.3 MCP 接入层（iFinD / Wind 的运行通道）
 
@@ -160,8 +163,8 @@ class HubConfig:
 ```
 pyproject.toml            # src 布局；pandas 必装，各源依赖作为可选 extras
 src/fin_data_hub/
-  __init__.py             # 导出 DataHub / HubConfig / Source / SecCode
-  facade.py               # DataHub 门面与调用链
+  __init__.py             # 导出 FinDataHub / HubConfig / Source / SecCode
+  facade.py               # FinDataHub 门面与调用链
   config.py               # HubConfig 及子配置、环境变量加载
   codes.py                # SecCode / venue / 类型推断
   mapping.py              # 各源代码映射规则
@@ -223,7 +226,7 @@ src/fin_data_hub/
 1. 脚手架：pyproject + src 布局 + errors/枚举
 2. codes + mapping（含单测）
 3. cache + ratelimit + single-flight（含单测）
-4. DataHub 门面 + 调度 + schema 规范化（含单测）
+4. FinDataHub 门面 + 调度 + schema 规范化（含单测）
 5. MCP 传输层：`mcp/client.py`（initialize/session/SSE/错误映射）+ iFinD markdown parser（fixture 测试）
 6. Tushare 适配器
 7. AkShare 适配器（fixture 测试）

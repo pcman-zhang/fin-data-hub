@@ -43,6 +43,7 @@ class BaseAdapter(ABC):
     CAP_FUND_NAV = "fund_nav"
     CAP_REFERENCE = "reference"
     CAP_TRADE_CALENDAR = "trade_calendar"
+    CAP_ADJUST_FACTORS = "adjust_factors"
 
     def bind_usage(self, ledger: UsageLedger) -> None:
         """由门面注入调用台账；适配器在真实调用边界记录。"""
@@ -100,3 +101,8 @@ class BaseAdapter(ABC):
 
     def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:
         raise NotImplementedError  # pragma: no cover
+
+    def fetch_adjust_factors(
+        self, codes: list[SecCode], *, start: str, end: str
+    ) -> pd.DataFrame:  # pragma: no cover - 抽象方法
+        raise NotImplementedError

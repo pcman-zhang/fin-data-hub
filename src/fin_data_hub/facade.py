@@ -1,4 +1,4 @@
-"""统一门面：:class:`DataHub`。
+"""统一门面：:class:`FinDataHub`。
 
 调用链：``normalize codes → capability check → cache lookup → adapter fetch
 → schema normalize → cache store → return``。
@@ -16,10 +16,17 @@ from fin_data_hub.capabilities import split_codes
 from fin_data_hub.codes import SecCode, parse_codes
 from fin_data_hub.config import HubConfig
 from fin_data_hub.enums import Source
+from fin_data_hub.errors import MissingCredentialError, SourceError
 from fin_data_hub.ratelimit import (
     RateLimiter,
     RateLimiterSet,
     default_rate_limiter_set,
+)
+from fin_data_hub.routing import (
+    apply_adjustment,
+    build_bars_plan,
+    fill_missing_fields,
+    missing_columns,
 )
 from fin_data_hub.schemas import (
     BARS_COLUMNS,
@@ -60,8 +67,8 @@ def _merge_frames(
     return merged
 
 
-class DataHub:
-    """多源金融数据统一入口。"""
+class FinDataHub:
+    """多源金融数据统一入口（v0 对外接口）。"""
 
     def __init__(
         self,
@@ -83,7 +90,7 @@ class DataHub:
         )
 
     @classmethod
-    def from_config(cls, config: HubConfig) -> DataHub:
+    def from_config(cls, config: HubConfig) -> FinDataHub:
         """按配置自动构建适配器注册表（缺凭证/依赖的源会被跳过）。"""
         from fin_data_hub.sources.factory import build_registry
 
@@ -107,7 +114,18 @@ class DataHub:
         scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
         if not scodes:
             raise ValueError("codes 不能为空")
-        adapter = self._adapter(resolved, BaseAdapter.CAP_BARS)
+        plan = build_bars_plan(resolved, adjust, self.config.routing)
+        primary_adapter = self._adapter(plan.primary, BaseAdapter.CAP_BARS)
+        factor_adapter = (
+            self._adapter(plan.factor_source, BaseAdapter.CAP_ADJUST_FACTORS)
+            if plan.factor_source is not None
+            else None
+        )
+        fallback_adapters = [
+            (str(fallback), self._adapter(fallback, BaseAdapter.CAP_BARS))
+            for fallback in plan.fallbacks
+            if fallback != plan.primary
+        ]
         key = (
             "bars",
             str(resolved),
@@ -120,24 +138,92 @@ class DataHub:
         )
         was_cached = (not force) and self.cache.contains(key)
 
-        def load() -> pd.DataFrame:
-            frames = [
+        def fetch_frames(adapter: BaseAdapter) -> list[pd.DataFrame]:
+            return [
                 adapter.fetch_bars(
                     chunk,
                     start=start,
                     end=end,
                     freq=freq,
-                    adjust=adjust,
+                    adjust=plan.adapter_adjust,
                     fields=tuple(fields) if fields else None,
                 )
-                for chunk in split_codes(resolved, "bars", scodes)
+                for chunk in split_codes(adapter.source, "bars", scodes)
             ]
+
+        def load() -> pd.DataFrame:
+            used_source = str(plan.primary)
+            frames: list[pd.DataFrame] = []
+            errors: list[str] = []
+            for label, adapter in [
+                (str(plan.primary), primary_adapter),
+                *fallback_adapters,
+            ]:
+                try:
+                    frames = fetch_frames(adapter)
+                    used_source = label
+                    break
+                except (SourceError, MissingCredentialError) as exc:  # 回退链
+                    errors.append(f"{label}: {exc}")
+            if not frames:
+                raise SourceError("所有数据源均失败: " + "; ".join(errors))
+
             merged = _merge_frames(
                 frames, dedupe_on=("code", "date"), sort_by=("code", "date")
             )
-            return finalize_frame(
-                merged, columns=BARS_COLUMNS, source=resolved, cached=was_cached
+
+            filled: dict[str, str] = {}
+            if (
+                self.config.routing.field_fill
+                and fallback_adapters
+                and missing_columns(merged, BARS_COLUMNS)
+            ):
+                fill_frames: list[tuple[str, pd.DataFrame]] = []
+                for label, adapter in fallback_adapters:
+                    try:
+                        fill_frames.append(
+                            (
+                                label,
+                                _merge_frames(
+                                    fetch_frames(adapter),
+                                    dedupe_on=("code", "date"),
+                                    sort_by=("code", "date"),
+                                ),
+                            )
+                        )
+                    except (SourceError, MissingCredentialError):
+                        continue
+                merged, filled = fill_missing_fields(
+                    merged, fill_frames, BARS_COLUMNS
+                )
+
+            if (
+                factor_adapter is not None
+                and plan.factor_source is not None
+                and adjust is not None
+            ):
+                factor_frames = [
+                    factor_adapter.fetch_adjust_factors(
+                        chunk, start=start, end=end
+                    )
+                    for chunk in split_codes(
+                        plan.factor_source, "adjust_factors", scodes
+                    )
+                ]
+                factors = _merge_frames(
+                    factor_frames, dedupe_on=("code", "date"), sort_by=("code", "date")
+                )
+                merged = apply_adjustment(merged, factors, adjust)
+
+            out = finalize_frame(
+                merged, columns=BARS_COLUMNS, source=used_source, cached=was_cached
             )
+            out.attrs["requested_source"] = str(resolved)
+            if plan.factor_source is not None:
+                out.attrs["factor_source"] = str(plan.factor_source)
+            if filled:
+                out.attrs["filled_from"] = filled
+            return out
 
         df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
         return _with_cached_flag(df, was_cached)
@@ -301,3 +387,4 @@ class DataHub:
         raise ValueError(
             "必须显式指定 source（或通过 HubConfig.default_source 配置默认值）"
         )
+

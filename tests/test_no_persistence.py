@@ -1,6 +1,6 @@
 import pandas as pd
 
-from fin_data_hub import DataHub, HubConfig, Source
+from fin_data_hub import FinDataHub, HubConfig, Source
 from fin_data_hub.sources import BaseAdapter, SourceRegistry
 
 
@@ -30,7 +30,7 @@ class _BarsAdapter(BaseAdapter):
 def test_library_writes_no_files(tmp_path, monkeypatch) -> None:
     """AC：库无任何持久化写盘（缓存/计量均仅在内存）。"""
     monkeypatch.chdir(tmp_path)
-    hub = DataHub(HubConfig(), registry=SourceRegistry([_BarsAdapter()]))
+    hub = FinDataHub(HubConfig(), registry=SourceRegistry([_BarsAdapter()]))
 
     hub.get_bars(
         ["600000.SH"], start="20260101", end="20260131", source="tushare"

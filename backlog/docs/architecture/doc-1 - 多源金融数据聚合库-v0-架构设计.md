@@ -3,7 +3,7 @@ id: doc-1
 title: 多源金融数据聚合库 v0 架构设计
 type: specification
 created_date: '2026-09-12 10:51'
-updated_date: '2026-09-13 10:11'
+updated_date: '2026-09-13 10:58'
 ---
 # 架构设计：多源金融数据聚合库 v0
 
@@ -36,6 +36,7 @@ updated_date: '2026-09-13 10:11'
 | iFinD | 是 | MCP 工具入参接受 WindCode（实测 `index_data` 000300.SH、基金净值 000001.OF）；MCP HTTP 直连已通过 `initialize`/`tools/list` 验证 |
 | Wind | 是（原生 WindCode） | MCP 工具入参接受 WindCode；`https://mcp.wind.com.cn/vserver_*/mcp/` HTTP 直连已通过 `initialize` 验证（stateless SSE，`Bearer <api_key>`） |
 | Fuyao | 是（thscode 与 canonical 一致） | REST 直连实测通过（快照/日线/日历/代码表） |
+| BaoStock | 否（`sh.600000` 形式，映射层转换） | 实测通过（日线/基础资料/日历；仅 SH/SZ） |
 | AkShare | 否 | 各接口参数不统一：`stock_zh_a_hist(symbol='000001')`、`fund_etf_hist_em(symbol='159707')`、`fund_open_fund_info_em(symbol='710001')`、`stock_zh_index_daily_em(symbol='csi931151')` |
 
 结论：canonical 采用 WindCode；映射层主要服务 AkShare；Tushare / iFinD / Wind 近似直通（iFinD、Wind 经远端 MCP 接入，见 3.3），但指数与别名个例仍需规则表。

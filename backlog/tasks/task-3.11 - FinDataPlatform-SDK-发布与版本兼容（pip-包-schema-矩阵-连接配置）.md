@@ -4,7 +4,7 @@ title: FinDataPlatform SDK 发布与版本兼容（pip 包 / schema 矩阵 / 连
 status: To Do
 assignee: []
 created_date: '2026-09-13 06:29'
-updated_date: '2026-09-13 08:24'
+updated_date: '2026-09-13 10:33'
 labels: []
 milestone: m-0
 dependencies:
@@ -32,4 +32,6 @@ SDK 作为独立发行物：pip 安装；**双模式（直连只读副本/读模
 
 <!-- SECTION:NOTES:BEGIN -->
 发行物命名（2026-09-13）：SDK 包名 fin-data-platform，依赖 fin-data-hub（FinDataHub）。
+
+SDK 接口模型采用 Pydantic v2；导出 JSON Schema 作为契约文档（doc-2 §6.17）。
 <!-- SECTION:NOTES:END -->

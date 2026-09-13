@@ -3,7 +3,7 @@ id: doc-5
 title: FinDataHub Router Policy（复权路由策略）
 type: specification
 created_date: '2026-09-13 10:01'
-updated_date: '2026-09-13 10:06'
+updated_date: '2026-09-13 11:08'
 ---
 # FinDataHub Router Policy（统一输出与跨源路由策略）
 
@@ -27,7 +27,9 @@ FinDataHub 对外输出**统一 schema**；但单源数据常不完整（缺字�
 
 1. 请求 `source` 始终是主源，不因补全而改变；
 2. **仅补缺**：不覆盖主源已有值；字段级合并；不静默近似；
-3. **复权**：可信源走原生复权；否则 `raw + factor` 合成（`hfq = raw × f`，`qfq = raw × f / f_latest`，按 code 分组、日期对齐、因子前向填充）；
+3. **复权**：可信源走原生复权；否则 `raw + factor` 合成（`hfq = raw × f`、`qfq = raw × f / f_latest`；按 code 分组、backward `merge_asof` **事件步进**对齐，支持稀疏因子源（事件行 + 窗口基准行）与非交易日 `start`）；
+   - 因子覆盖（实测，doc-8 §3.1）：股票 → Tushare `adj_factor` / BaoStock；ETF/LOF → Tushare `fund_adj`；场外基金/指数无因子（显式报错，不静默回退）；
+   - `factor_source` 默认 `TUSHARE`；可选 `BAOSTOCK`（仅股票，R2=doc-9 通过）且需按资产类型可用性校验；
 4. **回退**：主源失败 → 依序尝试 `fallbacks`；实际执行源写入溯源；
 5. **按需触发**：只有缺数据/缺字段时才调用补充源（成本最小化）；
 6. **无法补齐**：明确报错（`SourceError` / `UnsupportedCapability`）。
@@ -39,7 +41,7 @@ FinDataHub 对外输出**统一 schema**；但单源数据常不完整（缺字�
 class RoutingConfig:
     factor_source: Source | None = Source.TUSHARE
     trusted_native_adjust: frozenset[Source] = frozenset(
-        {Source.TUSHARE, Source.WIND, Source.AKSHARE}
+        {Source.TUSHARE, Source.AKSHARE}  # 开发期排除付费源 Wind/iFinD
     )
     fallbacks: tuple[Source, ...] = ()   # 主源失败时的回退链
     field_fill: bool = True              # 允许字段级补全

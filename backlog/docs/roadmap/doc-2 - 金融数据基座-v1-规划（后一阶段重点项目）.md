@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 10:17'
+updated_date: '2026-09-13 11:03'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 
@@ -283,6 +283,13 @@ docker/                  # 镜像与 compose（单机）
 - **实测确认**：Fuyao `historical` 的 `adjust` 返回**预计算复权价**；因子需从 `corporate-actions` 事件（`dividend_per_share` / `per_share_bonus`）推导；Tushare 提供 `adj_factor` 可直接使用。
 - **平台口径**：行情表存**原始价**；单独存**复权因子/公司行为事件**（版本化、PIT）；复权价在读取时按 `as-of` 与请求的 `adjust` 计算，不落全量 qfq/hfq 快照。
 - **推导与对账（约定）**：事件乘数 `m = P_prev(1+B)/(P_prev−D)`（P_prev 为除权前收盘原始价）；累计因子需**统一锚点**（建议上市日或首个事件），qfq 仅需相对值；Fuyao 事件分红已与 Tushare 因子隐含分红一致（doc-4），须**逐事件对账**后启用；纳入对账框架（TASK-2.13/3.5）。
-- **Hub 接口**：`TushareAdapter.fetch_adjust_factors`（`adj_factor`，Router 因子源）；`FuyaoAdapter.fetch_adjustment_events`（事件流，推导/对账用，**不注册为 Router factor_source**）。
+- **因子覆盖（实测 2026-09-13，详见 doc-8 §3.1）**：Tushare 股票走 `adj_factor`、ETF/LOF 走 `fund_adj`；BaoStock 仅股票；场外基金/指数无因子。
+- **Hub 接口**：`TushareAdapter.fetch_adjust_factors`（`adj_factor` / 待扩展 `fund_adj`，Router 因子源）；`FuyaoAdapter.fetch_adjustment_events`（事件流，推导/对账用，**不注册为 Router factor_source**）。
 - **Hub 处置（2026-09-13）**：Fuyao 适配器不提供原生复权；**Router 层**按策略组合 raw（请求源）+ factor（默认 Tushare）合成复权价，可信源走原生复权（doc-5、TASK-2.21）。
 - **对账结论（2026-09-13 实测）**：原始价两源完全一致；Tushare `adj_factor` 与理论乘数一致；**Fuyao 预计算复权价不符合"原始价 × 统一因子"语义**（同日 OHLC 比值不一致、内部比例被改变、隐含因子日常波动），**不可作为复权对账基准**；平台以原始价 + 因子为准，Fuyao 事件推导需逐事件与 Tushare 对账。证据见 doc-3 §5。
+
+### 6.17 接口模型与校验：Pydantic（v1 / REST）
+
+- **范围**：`FinDataPlatform` SDK 的请求/响应/配置模型、结果元数据模型；REST（FastAPI）复用同一批模型生成 OpenAPI；JSON Schema 供接口文档与数据字典使用。
+- **边界**：v0 `fin_data_hub` 不引入 Pydantic（核心依赖保持仅 `pandas`；契约靠类型 + doc-6 + 显式校验 + 金样测试）。
+- **收益**：SDK 与 REST 语义单点定义；跨语言消费方可用 OpenAPI/JSON Schema 生成客户端；校验错误统一。

@@ -4,7 +4,7 @@ title: FinDataPlatform REST（SDK 薄封装）与权限审计
 status: To Do
 assignee: []
 created_date: '2026-09-13 06:01'
-updated_date: '2026-09-13 08:24'
+updated_date: '2026-09-13 10:33'
 labels: []
 milestone: m-0
 dependencies:
@@ -31,4 +31,6 @@ ordinal: 26000
 
 <!-- SECTION:NOTES:BEGIN -->
 分层（2026-09-13）：REST 仅封装 FinDataPlatform SDK；WebUI 依赖本层（TASK-3.8 已加依赖）。
+
+REST DTO 使用 FinDataPlatform SDK 的 Pydantic 模型（FastAPI/OpenAPI 同一来源，doc-2 §6.17）。
 <!-- SECTION:NOTES:END -->

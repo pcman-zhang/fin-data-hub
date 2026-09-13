@@ -4,7 +4,7 @@ title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 /
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 08:59'
+updated_date: '2026-09-13 10:33'
 labels: []
 milestone: m-0
 dependencies: []
@@ -51,4 +51,6 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 时序定稿（2026-09-13）：数据平面=双时间轴时序（event_time × knowledge_time）；能力清单与 SDK 草图见 doc-2 §6.14；TASK-3.13 落地。
 
 未来特性（2026-09-13，暂不开发）：高频数据透传不入库（归一化后直接返回，绕过缓存/PIT），延迟统计输出 p99/mean（复用 UsageLedger latency 扩展分位数）——见 doc-2 §6.15；设计时预留透传路径接口。
+
+接口模型决策：v1 SDK/REST 使用 Pydantic v2（请求/响应/配置/元数据模型），REST 复用同一模型生成 OpenAPI；v0 hub 不引入 Pydantic（doc-2 §6.17）。
 <!-- SECTION:NOTES:END -->

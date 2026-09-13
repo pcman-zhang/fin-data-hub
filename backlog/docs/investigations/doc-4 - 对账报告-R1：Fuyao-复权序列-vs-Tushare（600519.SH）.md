@@ -1,9 +1,9 @@
 ---
 id: doc-4
-title: 复权数据对账调查报告：Fuyao vs Tushare（600519.SH）
+title: 对账报告 R1：Fuyao 复权序列 vs Tushare（600519.SH）
 type: guide
 created_date: '2026-09-13 09:43'
-updated_date: '2026-09-13 09:44'
+updated_date: '2026-09-13 11:01'
 ---
 # 复权数据对账调查报告：Fuyao vs Tushare（600519.SH）
 

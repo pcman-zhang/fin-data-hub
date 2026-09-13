@@ -4,7 +4,7 @@ title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 /
 status: In Progress
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 12:11'
+updated_date: '2026-09-13 12:14'
 labels: []
 milestone: m-0
 dependencies: []
@@ -63,4 +63,6 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 第一章完成（2026-09-13，doc-10）：三层结构（接入/数据/服务）、控制面与数据面拆分、缓存横切、依赖硬约束、根本要求（准确/新鲜 SLA 可度量/PIT 三要素）、补充要求（可审计、可扩展、成本权限、compose 部署）与任务落位映射。待评审。
 
 第 2 稿（2026-09-13，采纳评审）：新增 §3.1 DataPanel=逻辑数据集、§3.2 Raw→Canonical→Read Model（SDK/REST 只读 Read Model）、§3.3 Security Master（与 PIT 同级，security_id + 多源别名 + SCD2）、§3.4 Cache 非权威、§4.1 四时间模型（event/publish/knowledge/ingest）、§6.1 Schema First（Dictionary→Schema→SDK/API）。doc-2 §6.9 标准字段同步为四时间命名。待确认：Security Master 是否新增 TASK-3.14。
+
+第 3 稿（2026-09-13，采纳评审）：Read Model 语义版本化（字段兼容≠语义兼容，加字段不升版、口径变化升版）；宏观分域 macro_cn/macro_us/macro_global（防垃圾桶）；新增 §6.2 Source Independence Principle（canonical/read model 禁供应商特有字段，provider 维度 + Raw 层例外 + CI 校验）。doc-2 §6.11 同步宏观分域。
 <!-- SECTION:NOTES:END -->

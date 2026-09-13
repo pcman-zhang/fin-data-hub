@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 12:11'
+updated_date: '2026-09-13 12:14'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 

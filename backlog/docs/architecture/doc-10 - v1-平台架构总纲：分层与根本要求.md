@@ -3,7 +3,7 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-13 12:11'
+updated_date: '2026-09-13 12:14'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
@@ -36,7 +36,8 @@ updated_date: '2026-09-13 12:11'
 
 **定义**：DataPanel 是**一个有 schema、有 PIT 语义、有字典条目、有质量规则与 SLA 的逻辑数据集**，命名 `{domain}.{dataset}`。
 
-- `DataDomain`（市场平面）= 命名空间：`cn_equity / cn_fund / cn_futures / cn_options / hk_equity / us_equity / us_options / macro`；
+- `DataDomain`（市场平面）= 命名空间：`cn_equity / cn_fund / cn_futures / cn_options / hk_equity / us_equity / us_options / macro_cn / macro_us / macro_global`；
+- **宏观必须分域**（避免 `macro` 成为垃圾桶）：区域维度拆为 `macro_cn / macro_us / macro_global`（全球利率/汇率/大宗归 `macro_global`）；若某区域数据集膨胀，用域内 tag 分类，不新增层级、不把异质数据堆入单域；
 - DataPanel 是数据域下的**一级实体**：唯一 ID、schema 版本、PIT 类别、主键、更新频率、血缘与质量规则；
 - 存储映射（物理表/分区/压缩策略）、派生血缘、读模型与 SDK 方法**均引用 DataPanel ID**；
 - **明确排除**：DataPanel ≠ 存储系统 ≠ 数据库 schema ≠ 市场平面 ≠ 物理表集合；主结构只有 **DataDomain → DataPanel** 两级，不引入第三级 `DataSet` 概念（如需分组用 tag/子域，不改主结构）。
@@ -51,7 +52,8 @@ updated_date: '2026-09-13 12:11'
 | `cn_equity.financials.balance_sheet` | 资产负债表（append-only 版本） |
 | `cn_equity.market_events.namechange` | 名称变更（闭区间） |
 | `cn_fund.nav` | 场外基金净值 |
-| `macro.cn_rate` | 宏观利率序列 |
+| `macro_cn.rate` | 中国宏观利率序列 |
+| `macro_global.fx_rate` | 全球汇率序列 |
 
 ### 3.2 数据分层：Raw → Canonical → Read Model
 
@@ -65,7 +67,9 @@ updated_date: '2026-09-13 12:11'
 
 1. **SDK/REST 只读 Read Model**，不直读 Raw/Canonical 物理表（防耦合）；
 2. **换源不影响 SDK**：源差异（Wind/Tushare/AkShare/…）在 Raw→Canonical 之间被吸收，Raw 保留完整溯源；
-3. Read Model **版本化**（`_v1` 冻结后只增不改），字段变更走弃用流程；
+3. Read Model **语义版本化**（`_v1` / `_v2`），版本号表达**语义契约**而非数据库结构：
+   - **字段兼容 ≠ 语义兼容**：新增字段、扩展枚举等增量变更**不升版本**；字段*含义/口径/单位*变化（如 `pe_ttm` 改为 `pe_lyr`、复权基准变化）**必须升主版本**；
+   - 升版本 = 新旧并存过渡期 + 弃用公告；`_v1` 冻结后只增不改，移除字段须先弃用；
 4. Read Model 是**权威数据的投影**，非缓存：缓存只加速，不改变读取语义（§3.4）。
 
 ### 3.3 Security Master（平台基石，与 PIT 同级）
@@ -137,11 +141,22 @@ updated_date: '2026-09-13 12:11'
 - 变更流程：字典 → schema → 代码/迁移 → 弃用公告；**禁止"代码先写、文档后补"**；
 - 平台生命周期以 5~10 年计，Schema First 的长期收益远大于成本。
 
-### 6.2 依赖与写入硬约束
+### 6.2 Source Independence Principle（源独立性）
+
+**任何 DataPanel / Canonical / Read Model 不得暴露供应商特有字段或语义**：
+
+- ❌ `wind_ind_code` → ✅ `industry_code` + `industry_provider`；
+- ❌ `ts_pe` → ✅ `pe_ttm`（口径写进字典，来源写进血缘/provider 维度）；
+- 源特有信息只能以两种形式存在：① 通用字段 + `provider`/`scope` 维度；② **源扩展表**（仅 Raw 层或独立 extension schema，不进入 canonical 公共 schema）；
+- **Raw Layer 例外**：允许原样保留源字段（审计/重放所需）；
+- 目的：防止 Canonical Layer 退化为"某厂商层"，保证换源、多源合并与 SDK 长期稳定；
+- 强制校验：数据字典 CI 检查字段命名（禁止源品牌前缀/缩写进入 canonical），provider 必须可显式追溯。
+
+### 6.3 依赖与写入硬约束
 
 同 §2：单向依赖、对外无写入、内部写入端最小授权。
 
-### 6.3 成本与权限
+### 6.4 成本与权限
 
 付费源按调用计量；凭证三面（内部写入 / SDK 只读 DB 角色 / REST API Key `read/export/admin`），不落镜像。
 

@@ -1,0 +1,786 @@
+{
+  "$defs": {
+    "Compression": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "title": "After",
+          "type": "string"
+        },
+        "order_by": {
+          "title": "Order By",
+          "type": "string"
+        },
+        "segment_by": {
+          "title": "Segment By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "after",
+        "segment_by",
+        "order_by"
+      ],
+      "title": "Compression",
+      "type": "object"
+    },
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_dates": {
+          "$ref": "#/$defs/ExpectedDates"
+        },
+        "history_start": {
+          "title": "History Start",
+          "type": "string"
+        },
+        "universe": {
+          "title": "Universe",
+          "type": "string"
+        },
+        "universe_source": {
+          "title": "Universe Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "universe",
+        "universe_source",
+        "history_start",
+        "expected_dates"
+      ],
+      "title": "Coverage",
+      "type": "object"
+    },
+    "DerivedEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm_id": {
+          "title": "Algorithm Id",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "implementation": {
+          "title": "Implementation",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "output": {
+          "title": "Output",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "output",
+        "algorithm_id",
+        "implementation",
+        "owner",
+        "inputs",
+        "description"
+      ],
+      "title": "DerivedEntry",
+      "type": "object"
+    },
+    "Domain": {
+      "enum": [
+        "cn_equity",
+        "cn_fund",
+        "cn_futures",
+        "cn_options",
+        "hk_equity",
+        "us_equity",
+        "us_options",
+        "macro_cn",
+        "macro_us",
+        "macro_global"
+      ],
+      "title": "Domain",
+      "type": "string"
+    },
+    "ExpectedDates": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar": {
+          "title": "Calendar",
+          "type": "string"
+        },
+        "frequency": {
+          "title": "Frequency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "calendar",
+        "frequency"
+      ],
+      "title": "ExpectedDates",
+      "type": "object"
+    },
+    "FieldSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "enum": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enum"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "nullable": {
+          "title": "Nullable",
+          "type": "boolean"
+        },
+        "pit_role": {
+          "enum": [
+            "event_time",
+            "publish_time",
+            "knowledge_time",
+            "ingest_time",
+            "none"
+          ],
+          "title": "Pit Role",
+          "type": "string"
+        },
+        "precision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Precision"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RangeSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scale"
+        },
+        "type": {
+          "enum": [
+            "int64",
+            "float64",
+            "decimal",
+            "string",
+            "bool",
+            "date",
+            "timestamp",
+            "timestamp_tz",
+            "enum"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "nullable",
+        "description",
+        "pit_role"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+    },
+    "Lineage": {
+      "additionalProperties": false,
+      "properties": {
+        "transform": {
+          "title": "Transform",
+          "type": "string"
+        },
+        "upstream": {
+          "items": {
+            "$ref": "#/$defs/UpstreamRef"
+          },
+          "title": "Upstream",
+          "type": "array"
+        }
+      },
+      "required": [
+        "upstream",
+        "transform"
+      ],
+      "title": "Lineage",
+      "type": "object"
+    },
+    "MappingEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "object"
+        },
+        "provider": {
+          "$ref": "#/$defs/Provider"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint",
+        "fields"
+      ],
+      "title": "MappingEntry",
+      "type": "object"
+    },
+    "Provider": {
+      "enum": [
+        "tushare",
+        "baostock",
+        "wind",
+        "akshare",
+        "fuyao",
+        "ifind"
+      ],
+      "title": "Provider",
+      "type": "string"
+    },
+    "QualityRule": {
+      "additionalProperties": false,
+      "properties": {
+        "against": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Against"
+        },
+        "expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expr"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields"
+        },
+        "keys": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Keys"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "rule": {
+          "enum": [
+            "unique",
+            "not_null",
+            "range",
+            "enum",
+            "expression",
+            "reconcile",
+            "freshness"
+          ],
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "enum": [
+                "error",
+                "warn"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        },
+        "sla": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sla"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tolerance"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values"
+        }
+      },
+      "required": [
+        "rule"
+      ],
+      "title": "QualityRule",
+      "type": "object"
+    },
+    "RangeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        }
+      },
+      "title": "RangeSpec",
+      "type": "object"
+    },
+    "SourceEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "provider": {
+          "$ref": "#/$defs/Provider"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint"
+      ],
+      "title": "SourceEntry",
+      "type": "object"
+    },
+    "Storage": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_table": {
+          "title": "Canonical Table",
+          "type": "string"
+        },
+        "compression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Compression"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "partition_interval": {
+          "title": "Partition Interval",
+          "type": "string"
+        },
+        "partition_strategy": {
+          "enum": [
+            "event_time",
+            "knowledge_time",
+            "none"
+          ],
+          "title": "Partition Strategy",
+          "type": "string"
+        },
+        "read_model": {
+          "title": "Read Model",
+          "type": "string"
+        },
+        "read_model_impl": {
+          "enum": [
+            "view",
+            "projection_table"
+          ],
+          "title": "Read Model Impl",
+          "type": "string"
+        },
+        "retention": {
+          "title": "Retention",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canonical_table",
+        "read_model",
+        "read_model_impl",
+        "partition_strategy",
+        "partition_interval",
+        "retention"
+      ],
+      "title": "Storage",
+      "type": "object"
+    },
+    "UpdateSla": {
+      "additionalProperties": false,
+      "properties": {
+        "earliest_available": {
+          "title": "Earliest Available",
+          "type": "string"
+        },
+        "frequency": {
+          "title": "Frequency",
+          "type": "string"
+        },
+        "latest_available": {
+          "title": "Latest Available",
+          "type": "string"
+        },
+        "tolerance": {
+          "title": "Tolerance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frequency",
+        "earliest_available",
+        "latest_available",
+        "tolerance"
+      ],
+      "title": "UpdateSla",
+      "type": "object"
+    },
+    "UpstreamRef": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "title": "Dataset",
+          "type": "string"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields"
+        }
+      },
+      "required": [
+        "dataset"
+      ],
+      "title": "UpstreamRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "business_key": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Business Key",
+      "type": "array"
+    },
+    "coverage": {
+      "$ref": "#/$defs/Coverage"
+    },
+    "dataset": {
+      "title": "Dataset",
+      "type": "string"
+    },
+    "derived": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/DerivedEntry"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Derived"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "domain": {
+      "$ref": "#/$defs/Domain"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/FieldSpec"
+      },
+      "title": "Fields",
+      "type": "array"
+    },
+    "grain": {
+      "title": "Grain",
+      "type": "string"
+    },
+    "lineage": {
+      "$ref": "#/$defs/Lineage"
+    },
+    "mappings": {
+      "items": {
+        "$ref": "#/$defs/MappingEntry"
+      },
+      "title": "Mappings",
+      "type": "array"
+    },
+    "physical_key": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Physical Key",
+      "type": "array"
+    },
+    "pit_class": {
+      "enum": [
+        "market",
+        "versioned",
+        "scd2",
+        "snapshot"
+      ],
+      "title": "Pit Class",
+      "type": "string"
+    },
+    "quality": {
+      "items": {
+        "$ref": "#/$defs/QualityRule"
+      },
+      "title": "Quality",
+      "type": "array"
+    },
+    "semantic_version": {
+      "title": "Semantic Version",
+      "type": "integer"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceEntry"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "storage": {
+      "$ref": "#/$defs/Storage"
+    },
+    "update_sla": {
+      "$ref": "#/$defs/UpdateSla"
+    }
+  },
+  "required": [
+    "dataset",
+    "semantic_version",
+    "domain",
+    "description",
+    "pit_class",
+    "business_key",
+    "physical_key",
+    "grain",
+    "update_sla",
+    "sources",
+    "coverage",
+    "storage",
+    "quality",
+    "lineage",
+    "mappings",
+    "fields"
+  ],
+  "title": "DatasetSpec",
+  "type": "object"
+}

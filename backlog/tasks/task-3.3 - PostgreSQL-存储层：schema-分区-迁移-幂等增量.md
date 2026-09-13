@@ -4,7 +4,7 @@ title: TimescaleDB 存储层：schema / 分区 / 迁移 / 幂等增量
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 12:44'
+updated_date: '2026-09-13 13:15'
 labels: []
 milestone: m-0
 dependencies:
@@ -40,4 +40,6 @@ ordinal: 22000
 时序存储（2026-09-13）：hypertable 按 (panel,key,event_time) 分区；knowledge_time 版本维度；按频率连续聚合；time_bucket_gapfill；压缩/保留按频率分级（doc-2 §6.14）。
 
 存储策略输入（2026-09-13，doc-13）：域 schema、hypertable 分区策略（按 pit_class 推导）、物理键唯一索引、不建 FK、is_latest 读侧派生、投影表代次 rename/swap、压缩参数登记字典。
+
+DDL 输入约定（2026-09-13）：canonical_table = `<domain>.<其余路径以下划线连接>`（如 cn_equity.financials_balance_sheet）；read_model = mart.<name>_v<semantic_version>；partition_strategy 按 pit_class 默认推导。
 <!-- SECTION:NOTES:END -->

@@ -3,7 +3,7 @@ id: doc-6
 title: 归一化层与 FinDataHub API 契约设计
 type: specification
 created_date: '2026-09-13 10:28'
-updated_date: '2026-09-13 10:50'
+updated_date: '2026-09-13 11:16'
 ---
 # 归一化层与 FinDataHub API 契约设计
 
@@ -240,5 +240,11 @@ normalize(raw: pd.DataFrame, spec: ResponseSpec, *, source: Source, endpoint: st
   - `schemas.py`：bars/snapshot/nav/reference 增加 `currency` 列（按 venue 集中推导）；
   - **spec 框架**：`fin_data_hub/specs/`（4 源 TOML：tushare/akshare/wind/fuyao）+ loader/validator/`normalize()` + 覆盖度测试；
   - facade：`get_adjust_factors` / `get_adjustment_events` 落地；`get_intraday_bars` / `get_edb_series` 预留（抛 `UnsupportedCapability`）。
-- **阶段 B（待做）**：adapter 内部映射切换为 `normalize()`，金样对照；iFinD（markdown 文本）保持 parser 路径（在文档中标注为例外）。
-- **阶段 C（待做）**：BaoStock / HK / US 扩展只写 spec + 薄 adapter。
+- **阶段 B（已完成 2026-09-13）**：
+  - spec 框架增强：`code` 字段可用 `mapper.from_source` 还原 canonical / 单标 `code=` 覆盖（响应无代码列时自动补 `code` 列）、`optional=true` 缺失置空、`bool` 兼容 `"1"/"0"` 与真值字符串；
+  - 已切换 `normalize()`：Tushare（bars / fund_nav / trade_calendar / adjust_factors）、AkShare（bars / fund_nav）、Fuyao（bars / snapshot / adjustment_events；快照日期仍在 adapter 注入）；
+  - **例外（保留 bespoke 映射）**：iFinD（markdown 文本 parser）；Wind（单位因子随响应 `unit` 元数据动态变化，保留 `_map_kline` / `_map_snapshot`）；AkShare/Fuyao/BaoStock 的交易日历为**派生结果**（开市日集合 → 区间逐日）非行映射。
+- **阶段 C（已完成 2026-09-13）**：
+  - BaoStock spec（bars / trade_calendar / adjust_factors）+ adapter 切换（因子基准行逻辑不变）；
+  - HK/US/GI/TI/WI：CodeMap（`PassthroughMapper`）覆盖与不支持源的明确报错已有测试（`test_mapping.py`）；对应 adapter 端点实现前不预置 spec；
+  - CI：spec 目标列 ⊆ canonical schema（`test_specs.py`）、各源金样、全量测试通过。

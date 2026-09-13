@@ -1,0 +1,74 @@
+dataset: ref.security_alias
+semantic_version: 1
+domain: ref
+description: 多源代码映射（source + source_code + 有效期 → security_id）
+pit_class: scd2
+business_key: [security_id, source, source_code, valid_from]
+physical_key: [security_id, source, source_code, valid_from, knowledge_time, version]
+grain: 标的 × 数据源 × 源代码 × 有效期
+update_sla:
+  frequency: daily
+  earliest_available: "T+1 08:00"
+  latest_available: "T+1 22:00"
+  tolerance: "1d"
+sources: []
+coverage:
+  universe: 全域标的（含退市）
+  universe_source: ref.security_master
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: daily
+storage:
+  canonical_table: ref.security_alias
+  read_model: mart.security_alias_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [security_id, source, source_code, valid_from, knowledge_time, version]
+    severity: error
+lineage:
+  upstream:
+    - dataset: ref.security_master
+  transform: derive
+mappings: []
+fields:
+  - name: security_id
+    type: int64
+    nullable: false
+    description: 平台标的 ID
+    pit_role: none
+  - name: source
+    type: enum
+    enum: [canonical, tushare, baostock, akshare, wind, ifind, fuyao]
+    nullable: false
+    description: 数据源标识（canonical 表示平台代码本身）
+    pit_role: none
+  - name: source_code
+    type: string
+    nullable: false
+    description: 源端代码（如 600000.SH / sh.600000 / 600000）
+    pit_role: none
+  - name: valid_from
+    type: date
+    nullable: false
+    description: 映射生效起始（通常为上市日）
+    pit_role: event_time
+  - name: valid_to
+    type: date
+    nullable: true
+    description: 映射失效日（NULL=至今）
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 同业务键版本号
+    pit_role: none

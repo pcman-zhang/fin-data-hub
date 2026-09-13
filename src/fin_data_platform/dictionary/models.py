@@ -24,6 +24,7 @@ class Domain(StrEnum):
     MACRO_CN = "macro_cn"
     MACRO_US = "macro_us"
     MACRO_GLOBAL = "macro_global"
+    REF = "ref"
 
 
 class Provider(StrEnum):

@@ -105,7 +105,8 @@
         "us_options",
         "macro_cn",
         "macro_us",
-        "macro_global"
+        "macro_global",
+        "ref"
       ],
       "title": "Domain",
       "type": "string"

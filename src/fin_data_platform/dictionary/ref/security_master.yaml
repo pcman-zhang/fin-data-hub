@@ -1,0 +1,102 @@
+dataset: ref.security_master
+semantic_version: 1
+domain: ref
+description: 标的注册主数据（SCD2 属性区间；含退市永久保留；由 FinDataHub 基础信息构建）
+pit_class: scd2
+business_key: [security_id, valid_from]
+physical_key: [security_id, valid_from, knowledge_time, version]
+grain: 标的 × 属性生效区间
+update_sla:
+  frequency: daily
+  earliest_available: "T+1 08:00"
+  latest_available: "T+1 22:00"
+  tolerance: "1d"
+sources: []
+coverage:
+  universe: 全域标的（股票/ETF/LOF/场外基金/指数；含退市）
+  universe_source: self
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: daily
+storage:
+  canonical_table: ref.security_master
+  read_model: mart.security_master_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [security_id, valid_from, knowledge_time, version]
+    severity: error
+  - rule: not_null
+    fields: [security_id, canonical_code, sec_type, name, valid_from]
+    severity: error
+lineage:
+  upstream: []
+  transform: raw
+mappings: []
+fields:
+  - name: security_id
+    type: int64
+    nullable: false
+    description: 平台标的 ID（稳定主键）
+    pit_role: none
+  - name: canonical_code
+    type: string
+    nullable: false
+    description: canonical 代码（WindCode，业务键）
+    pit_role: none
+  - name: sec_type
+    type: enum
+    enum: [stock, etf, lof, fund, index, future, option, bond]
+    nullable: false
+    description: 证券类型
+    pit_role: none
+  - name: name
+    type: string
+    nullable: false
+    description: 简称（当前值；历史名称见 attribute_history）
+    pit_role: none
+  - name: currency
+    type: string
+    nullable: true
+    description: ISO 4217 货币
+    pit_role: none
+  - name: list_date
+    type: date
+    nullable: true
+    description: 上市日
+    pit_role: event_time
+  - name: delist_date
+    type: date
+    nullable: true
+    description: 退市日（NULL=在市；退市记录永久保留）
+    pit_role: none
+  - name: status
+    type: enum
+    enum: [L, P, D]
+    nullable: false
+    description: 当前状态（L 上市 / P 暂停 / D 退市）
+    pit_role: none
+  - name: valid_from
+    type: date
+    nullable: false
+    description: 属性区间起点（SCD2）
+    pit_role: event_time
+  - name: valid_to
+    type: date
+    nullable: true
+    description: 属性区间终点（NULL=至今）
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 同业务键版本号
+    pit_role: none

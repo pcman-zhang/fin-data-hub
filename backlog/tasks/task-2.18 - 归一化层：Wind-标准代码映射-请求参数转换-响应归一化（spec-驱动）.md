@@ -4,9 +4,12 @@ title: 归一化层：Wind 标准代码映射 + 请求参数转换 + 响应归�
 status: To Do
 assignee: []
 created_date: '2026-09-13 08:41'
+updated_date: '2026-09-13 09:04'
 labels: []
 dependencies:
   - TASK-2.2
+documentation:
+  - backlog/docs/integrations/doc-3 - Fuyao-REST-API-接入参考（开发用）.md
 parent_task_id: TASK-2
 ordinal: 32000
 ---
@@ -24,3 +27,9 @@ ordinal: 32000
 - [ ] #3 请求参数转换与响应归一化 spec 化（机读文件）+ 覆盖度校验
 - [ ] #4 与平台数据字典一致性校验（CI）；全量测试通过
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Fuyao 字段/单位/枚举映射（doc-3 §2）作为映射 spec 首批输入。
+<!-- SECTION:NOTES:END -->

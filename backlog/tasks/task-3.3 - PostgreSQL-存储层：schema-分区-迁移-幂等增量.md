@@ -4,7 +4,7 @@ title: TimescaleDB 存储层：schema / 分区 / 迁移 / 幂等增量
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 08:18'
+updated_date: '2026-09-13 08:56'
 labels: []
 milestone: m-0
 dependencies:
@@ -31,4 +31,10 @@ ordinal: 22000
 
 <!-- SECTION:NOTES:BEGIN -->
 存储按 PIT 分级落地：append-only 版本表 + is_latest 物化视图；复权因子版本化、复权价读时按 as-of 计算；指数成分用生效区间 + SCD2（doc-2 §6.9）。
+
+读写模块设计（2026-09-13，doc-2 §6.13）：storage/{engine,schema,migrations,writers,readers,versioning}；写入=staging+COPY→幂等 merge+PIT append-only+advisory lock+job_runs，提交后刷新 is_latest/连续聚合并递增 Redis 代际；读取=as-of（DISTINCT ON/window）+ 读模型视图 + 游标分页 + Arrow；选型 SQLAlchemy Core + Alembic + psycopg3；读写 DSN/角色分离。
+
+修正（2026-09-13）：写入端不限于 scheduler——派生计算/文件导入/质量结果也是内部写入端；按 schema 最小授权（ingestion→raw/staging+主数据、derived→derived、import→raw、quality→quality）；派生管线见 TASK-3.12。
+
+时序存储（2026-09-13）：hypertable 按 (panel,key,event_time) 分区；knowledge_time 版本维度；按频率连续聚合；time_bucket_gapfill；压缩/保留按频率分级（doc-2 §6.14）。
 <!-- SECTION:NOTES:END -->

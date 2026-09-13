@@ -4,11 +4,14 @@ title: 接入同花顺金融数据API（Fuyao）REST 源（一期）
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:52'
+updated_date: '2026-09-13 09:04'
 labels: []
 dependencies: []
 references:
   - 'https://fuyao.aicubes.cn/docs/api-reference/overview/'
   - 'https://fuyao.aicubes.cn/llms-full.txt'
+documentation:
+  - backlog/docs/integrations/doc-3 - Fuyao-REST-API-接入参考（开发用）.md
 parent_task_id: TASK-2
 ordinal: 18000
 ---
@@ -27,3 +30,9 @@ ordinal: 18000
 - [ ] #4 fixture 测试覆盖成功信封/错误码/字段与单位映射；integration 测试按 FIN_DATA_HUB_FUYAO_API_KEY 自动 skip
 - [ ] #5 README 支持矩阵与凭证说明、doc-1 数据源章节更新；注明当前免费与动态限流
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+开发参考 doc-3 已整理（2026-09-13）。关键约束：historical 单标的且窗口 ≤10 年（需分块合并）；snapshot 无交易日期（date 由 data.timestamp 推导）；calendar 固定近一年窗口；tickers/list 分页 limit≤10000；reference 无 industry 字段；错误码映射见 doc-3 §1。
+<!-- SECTION:NOTES:END -->

@@ -4,7 +4,7 @@ title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 /
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 08:41'
+updated_date: '2026-09-13 08:59'
 labels: []
 milestone: m-0
 dependencies: []
@@ -43,4 +43,12 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 市场平面定稿（2026-09-13）：统一平台、市场分平面——cn_equity/cn_fund/cn_futures/cn_options/hk_equity/us_equity/us_options 各自 Normalization；共享 Security Master/PIT/字典/质量/存储/SDK；宏观单一平面（含汇率官方序列；TLT/SHY 按数据形态归属）；HK/US 代码模型扩展纳入设计（doc-2 §6.11）。Redis 2G/volatile-lru/代际失效/Arrow/fail-open；只读副本暂不做、保留读写 DSN 分离。
 
 指数子平面与归一化层（2026-09-13）：指数分 cn_index/hk_index/us_index(.GI)/ths_index(.TI)/wind_index(.WI)；canonical 遵循 Wind 标准，不支持者映射校准；归一化层在 fin_data_hub（请求代码/参数转换 + 响应归一化，spec 驱动），platform 做面板级归一化（doc-2 §6.12）。
+
+存储读写模块方案见 doc-2 §6.13（engine/schema/migrations/writers/readers/versioning；读写 DSN 分离；幂等+PIT append-only；as-of 读模型；Arrow；SQLAlchemy Core+Alembic+psycopg3）。
+
+修正（2026-09-13）：写入面=平台内部写入端（ingestion/派生计算/文件导入/质量结果），按 schema 最小授权；派生数据需血缘与重述重算（TASK-3.12）。
+
+时序定稿（2026-09-13）：数据平面=双时间轴时序（event_time × knowledge_time）；能力清单与 SDK 草图见 doc-2 §6.14；TASK-3.13 落地。
+
+未来特性（2026-09-13，暂不开发）：高频数据透传不入库（归一化后直接返回，绕过缓存/PIT），延迟统计输出 p99/mean（复用 UsageLedger latency 扩展分位数）——见 doc-2 §6.15；设计时预留透传路径接口。
 <!-- SECTION:NOTES:END -->

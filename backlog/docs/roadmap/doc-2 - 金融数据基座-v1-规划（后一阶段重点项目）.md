@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 08:41'
+updated_date: '2026-09-13 08:59'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 
@@ -151,11 +151,11 @@ docker/                  # 镜像与 compose（单机）
 
 ### 6.7 凭证与权限模型（已定：三个凭证面）
 
-- **写入面（平台内部）**：ingestion / scheduler 持有主库**读写**凭证；不对 SDK / REST 暴露。
+- **写入面（平台内部）**：ingestion、派生计算、文件导入、质量结果等内部服务持有主库**读写**凭证（按 schema 最小授权）；不对 SDK / REST 暴露。
 - **SDK 面（外部直连）**：PostgreSQL **只读角色**（连只读副本），按域授权（`mart` / `api` schema SELECT）；凭证为 **DB 凭证**（账号密码 / IAM / 证书），非 API Key；按消费方独立账号并轮换。
 - **REST 面（外部服务化）**：**API Key**（哈希存储、按消费方签发、可撤销），作用域 `read` / `export` / `admin`（触发同步/回填等管理动作）；**不提供数据写入**。
 - **WebUI**：管理员会话（SSO 或本地账号）+ 角色（只读 / 运维），独立于对外 API Key。
-- **原则**：数据写入只经平台采集链路（幂等 + 质量门 + PIT 知识时间）；外部写入会破坏治理与 PIT 语义。如需用户自有数据，另设命名空间/表，不进入平台数据域。
+- **原则**：数据写入只经平台内部服务（采集 / 派生计算 / 文件导入 / 质量结果；幂等 + 质量门 + PIT 知识时间）；外部写入会破坏治理与 PIT 语义。如需用户自有数据，另设命名空间/表，不进入平台数据域。
 - **SDK 双模式**：SDK 支持「直连 DB（只读凭证）」与「REST 后端（API Key）」两种模式，供有无 DB 网络权限的消费方选择，语义一致。
 - **凭证卫生**：不落仓库/镜像/日志；TLS；最小权限；轮换；按 key/角色限流与成本归因；审计留痕。
 
@@ -219,3 +219,61 @@ docker/                  # 镜像与 compose（单机）
   3. 响应归一化：字段/单位/枚举/时区/币种/日期 → hub 统一 schema + 元数据。
 - **实现方式**：映射 **spec 驱动**（机读文件，source × endpoint），与平台数据字典（TASK-3.2）校验一致；CI 检查覆盖度。
 - **边界**：hub 做"源 → 统一"归一化；platform 做"面板级"归一化（跨源合并、PIT 版本、派生指标、质量门）。
+
+### 6.13 数据库读写模块设计（2026-09-13 方案）
+
+**模块划分（`src/fin_data_platform/storage/`）**
+
+- `engine.py`：连接与引擎管理——`DB_WRITE_DSN`（平台内部写入端：ingestion / 派生计算 / 导入 / 质量）与 `DB_READ_DSN`（SDK/REST）分离；连接池、`statement_timeout`（读）、TLS。
+- `schema.py` + `migrations/`：SQLAlchemy Core 表定义；Alembic 迁移 + Timescale DDL（hypertable、压缩、保留、连续聚合）；`schema_version` 表。
+- `writers.py`：幂等写入（staging + COPY → merge upsert；唯一键 `ON CONFLICT`）；PIT append-only（重述追加版本，不回写历史）；批次事务 + advisory lock 防并发重复。
+- `readers.py`：as-of 查询（`knowledge_date <= as_of` + 每键取最新版本）、时间序列/截面查询、游标分页、字段投影、Arrow 输出（ADBC/psycopg）。
+- `versioning.py`：schema 版本与 SDK 兼容校验（连接时检查，不兼容明确报错）。
+
+**写入路径（平台内部写入端：ingestion / 派生计算 / 文件导入 / 质量结果）**
+
+- 写凭证仅平台内部服务持有，按 schema 最小授权：ingestion 写 raw/staging 与主数据；派生计算写 derived schema；文件导入写 raw；质量检查写 quality schema。
+1. 批次开始：`job_runs` 记录 + advisory lock（按 panel/分区）。
+2. 采集结果 → staging（unlogged 临时表）→ `COPY` 批量装载。
+3. merge 进 hypertable：幂等 upsert；PIT 数据 append-only（新 `knowledge_date`/`version`/`ingest_ts`）。
+4. 派生数据：读取 as-of 正确的输入 → DuckDB/批量计算 → 写入 derived 表并记录血缘（输入数据集版本、公式版本、computed_at）；源数据重述时重算并追加版本。
+5. 提交后：刷新 `is_latest` 物化视图 / 连续聚合；递增 Redis 代际版本触发缓存失效。
+6. 失败：批次回滚 + 重试（复用 v0 退避）；重跑结果一致。
+
+**读取路径（SDK 直连 / REST 经 SDK）**
+
+- as-of 语义：`DISTINCT ON (key) ... ORDER BY knowledge_date DESC`（或窗口函数），保证无前视；不传 `as_of` 即当前最新。
+- 读模型：`mart` / `api` schema 视图与物化视图（对外稳定契约）；SDK 内部查询同样走读模型，不碰内部原始表。
+- 缓存：读经 Redis L2（键含 panel/as_of/params；代际失效）；写路径不经过缓存。
+
+**技术选型**：SQLAlchemy 2.x Core + Alembic + psycopg3；批量导出/读取用 Arrow（ADBC 或 psycopg Arrow）；SDK 同步实现，REST 以线程池调用同一 SDK（不维护双份实现）。
+
+**测试**：临时 PostgreSQL（testcontainers 或 compose profile）跑迁移/幂等重跑/as-of/性能基准；CI 中不依赖生产库。
+
+### 6.14 时序能力与双时间轴（2026-09-13 决策）
+
+- **模型**：数据平面 = **双时间轴时序**——事件时间轴（event_time，序列观测时点：交易日/报告期/指标期数）与知识时间轴（knowledge_time，PIT 版本/发布轴）；查询同时指定 `start/end`（事件时间范围）与 `as_of`（知识时间），二者正交。
+- **时序能力清单**：
+  1. 范围序列查询：多键 × 字段 × 时间范围，频率参数（1d/1w/1mo/1q/1y 与分钟级）；
+  2. 日历/时区/时段：交易日历 vs 自然日；交易所时区与会话（CN Asia/Shanghai；HK/US 各自）；
+  3. 重采样与聚合：连续聚合（日→周/月），降采样/升采样规则明确；
+  4. 缺口处理：null / 前值填充 / 最近值，显式策略并标记；
+  5. 窗口与滚动：rolling / 累积 / 同比环比，且 PIT 正确（只用 as_of 可见数据）；
+  6. 跨序列对齐与 asof join（如估值序列 join 价格序列）；
+  7. 版本查询：vintage 序列（as-first-reported）、同一 event_time 的版本历史；
+  8. 多频段：日频与分钟级共存；分钟级按保留策略压缩/降采样。
+- **存储支撑（TimescaleDB）**：hypertable 按 (panel, key, event_time) 分区；knowledge_time 为版本维度；按频率建连续聚合；`time_bucket_gapfill` 处理缺口；压缩/保留按频率分级。
+- **SDK 接口草图**：
+  - `get_series(keys, fields, start, end, freq="1d", as_of=None, fill=None, calendar="trading")`
+  - `get_cross_section(date, as_of=None, fields=...)`
+  - `get_versions(key, event_time)`（vintage 历史）
+  - `get_panel(keys, fields, start, end, freq, as_of)`（宽表/长表可选）
+- **PIT 与派生**：派生序列（收益率/均线/因子）在 as-of 输入上计算并记录血缘（TASK-3.12）。
+
+### 6.15 高频数据透传与延迟统计（未来特性，暂不开发）
+
+- **状态**：登记为未来特性，暂不开发（2026-09-13）。
+- **透传（不入库）**：高频数据（分钟 / tick / 实时快照）**不落库、无 PIT 版本**；请求经归一化层后直接返回（hub → SDK/REST）。复用：限流/配额/鉴权；绕过：Redis 缓存（或仅秒级微缓存）与持久化/质量门。
+- **归一化仍适用**：代码、字段、单位、时间戳（毫秒精度/时区）、会话状态；不产生知识时间版本。
+- **延迟统计**：端到端采样（源调用 → 归一化 → 返回），按 source/endpoint/时间窗输出 **p99 / mean**（可扩展 p50/p95）；复用 v0 UsageLedger 的 latency 记录并扩展分位数；接入 WebUI/指标与阈值告警。
+- **边界**：高频透传不改变"行情类入库、事件类版本化"的主线；若未来高频需入库，另立设计与保留策略。

@@ -3,7 +3,7 @@ id: doc-6
 title: 归一化层与 FinDataHub API 契约设计
 type: specification
 created_date: '2026-09-13 10:28'
-updated_date: '2026-09-13 11:38'
+updated_date: '2026-09-13 11:51'
 ---
 # 归一化层与 FinDataHub API 契约设计
 
@@ -30,6 +30,9 @@ class FinDataHub:
     def get_fund_nav(codes, *, start=None, end=None, source=None, force=False, ttl=None) -> pd.DataFrame
     def get_reference(kind, *, source=None, force=False, ttl=None) -> pd.DataFrame
     def get_security_info(codes, *, source=None, force=False, ttl=None) -> pd.DataFrame
+    def get_index_weights(codes, *, start, end, source=None, force=False, ttl=None) -> pd.DataFrame
+    def get_financials(codes, *, kind, start, end, source=None, force=False, ttl=None) -> pd.DataFrame
+    def get_market_events(*, kind, start, end, codes=None, source=None, force=False, ttl=None) -> pd.DataFrame
     def get_trade_calendar(*, start, end, source=None, force=False, ttl=None) -> pd.DataFrame
     def stats() -> dict
 
@@ -91,6 +94,13 @@ class FinDataHub:
 | reference(industry_member) | `code/name/l1_code/l1_name/l2_code/l2_name/l3_code/l3_name/in_date/out_date/is_new` | str/datetime64 | 区间型 PIT（保留已剔除记录） |
 | reference(index_list) | `code/name/market/category/publisher/list_date` | 同上 | |
 | security_info | `code/name/sec_type/market/list_status/list_date/delist_date` | str/datetime64 | 按代码基础信息（股票/ETF/LOF/场外/指数） |
+| index_weights | `code/date/con_code/weight` | str/datetime64/float | 指数成分与权重；快照型 PIT（as-of 取最近一期） |
+| financials(balance_sheet) | `code/ann_date/end_date/report_type` + 资产/负债/权益核心列 | str/datetime64/float | `start/end` 按公告日；资产负债表核心 curated 列 |
+| financials(financial_indicator) | `code/ann_date/end_date/report_type` + 每股/盈利/成长/杠杆核心列 | 同上 | 财务指标核心 curated 列 |
+| market_events(ipo) | `code/name/ipo_date/issue_date/price/pe/amount/market_amount/limit_amount/funds/ballot` | str/datetime64/float | 新股发行（new_share） |
+| market_events(suspension) | `code/date/suspend_type/suspend_timing` | 同上 | 停复牌（suspend_d；S 停牌 / R 复牌） |
+| market_events(st) | `code/name/date/st_type/type_name` | 同上 | 风险警示板名单（stock_st，按日） |
+| market_events(namechange) | `code/name/start_date/end_date/ann_date/change_reason` | 同上 | 名称生效**闭区间**（`start_date <= as_of <= end_date`，NULL=至今）；ann_date 为公告日 |
 | trade_calendar | `date/is_open` | datetime64[ns]/bool | 区间内逐日 |
 | adjust_factors（adapter 级） | `code/date/adj_factor` | float64 | 绝对累计因子（统一锚点，当前 Tushare） |
 | adjustment_events（adapter 级） | `code/ex_date/dividend_per_share/per_share_bonus` | float64 | 每股、税前 |
@@ -251,6 +261,10 @@ normalize(raw: pd.DataFrame, spec: ResponseSpec, *, source: Source, endpoint: st
   - 已切换 `normalize()`：Tushare（bars / fund_nav / trade_calendar / adjust_factors）、AkShare（bars / fund_nav）、Fuyao（bars / snapshot / adjustment_events；快照日期仍在 adapter 注入）；
   - **例外（保留 bespoke 映射）**：iFinD（markdown 文本 parser）；Wind（单位因子随响应 `unit` 元数据动态变化，保留 `_map_kline` / `_map_snapshot`）；AkShare/Fuyao/BaoStock 的交易日历为**派生结果**（开市日集合 → 区间逐日）非行映射。
 - **TASK-2.26 扩展（2026-09-13）**：新增 `get_security_info` 与 reference kinds `etf_list` / `delist_list`（契约只增不改）。
+- **TASK-2.29 扩展（2026-09-13）**：新增 `get_market_events`（ipo/suspension/st 三 kind；st 日频名单已分页取全量）。
+- **TASK-2.31 扩展（2026-09-13）**：`get_market_events` 增加 `namechange`（名称区间 + 公告日，闭区间 PIT，支持 as-of 名称还原）。
+- **TASK-2.28 扩展（2026-09-13）**：新增 `get_financials`（balance_sheet 22 列 / financial_indicator 21 列，公共 PIT 键 ann_date/end_date/report_type）。
+- **TASK-2.30 扩展（2026-09-13）**：新增 `get_index_weights`（Tushare `index_weight`，单指数逐次调用，月度快照）。
 - **TASK-2.27 扩展（2026-09-13）**：新增 reference kinds `industry_classify`（SW2021 L1/L2/L3 全量，511 条）与 `industry_member`（成分含历史：Y 5902 + N 2006，offset 分页）；`parent_code` 组装口径为上级 `industry_code`。
 - **阶段 C（已完成 2026-09-13）**：
   - BaoStock spec（bars / trade_calendar / adjust_factors）+ adapter 切换（因子基准行逻辑不变）；

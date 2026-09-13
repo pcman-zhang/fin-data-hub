@@ -1,10 +1,10 @@
 ---
 id: TASK-3.1
 title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 / WebUI
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 10:33'
+updated_date: '2026-09-13 12:06'
 labels: []
 milestone: m-0
 dependencies: []
@@ -31,6 +31,12 @@ ordinal: 20000
 - [ ] #9 管理 WebUI 信息架构与权限模型定稿；输出任务拆分与排期
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+第一章架构总纲（分层/依赖规则/根本要求）→ 数据字典规范 → REST 契约 → TimescaleDB schema → WebUI IA → 整合评审。以分支 feat/v1-data-platform 小粒度提交，便于 review。
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
@@ -53,4 +59,6 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 未来特性（2026-09-13，暂不开发）：高频数据透传不入库（归一化后直接返回，绕过缓存/PIT），延迟统计输出 p99/mean（复用 UsageLedger latency 扩展分位数）——见 doc-2 §6.15；设计时预留透传路径接口。
 
 接口模型决策：v1 SDK/REST 使用 Pydantic v2（请求/响应/配置/元数据模型），REST 复用同一模型生成 OpenAPI；v0 hub 不引入 Pydantic（doc-2 §6.17）。
+
+第一章完成（2026-09-13，doc-10）：三层结构（接入/数据/服务）、控制面与数据面拆分、缓存横切、依赖硬约束、根本要求（准确/新鲜 SLA 可度量/PIT 三要素）、补充要求（可审计、可扩展、成本权限、compose 部署）与任务落位映射。待评审。
 <!-- SECTION:NOTES:END -->

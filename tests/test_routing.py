@@ -237,7 +237,14 @@ def test_tushare_fetch_adjust_factors() -> None:
     assert df["adj_factor"].tolist() == [1.5, 2.0]
     assert str(df["date"].dtype) == "datetime64[ns]"
     assert adapter.capabilities == frozenset(
-        {"bars", "fund_nav", "reference", "trade_calendar", "adjust_factors"}
+        {
+            "bars",
+            "fund_nav",
+            "reference",
+            "trade_calendar",
+            "security_info",
+            "adjust_factors",
+        }
     )
 
 

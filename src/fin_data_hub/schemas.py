@@ -51,6 +51,53 @@ REFERENCE_COLUMNS: dict[str, tuple[str, ...]] = {
         "market",
         "currency",
     ),
+    "etf_list": (
+        "code",
+        "name",
+        "fullname",
+        "index_code",
+        "index_name",
+        "setup_date",
+        "list_date",
+        "list_status",
+        "exchange",
+        "manager",
+        "custodian",
+        "mgt_fee",
+        "etf_type",
+        "currency",
+    ),
+    "delist_list": (
+        "code",
+        "name",
+        "list_date",
+        "delist_date",
+        "market",
+        "currency",
+    ),
+    "industry_classify": (
+        "index_code",
+        "name",
+        "level",
+        "industry_code",
+        "parent_code",
+        "is_pub",
+        "src",
+    ),
+    "industry_member": (
+        "code",
+        "name",
+        "l1_code",
+        "l1_name",
+        "l2_code",
+        "l2_name",
+        "l3_code",
+        "l3_name",
+        "in_date",
+        "out_date",
+        "is_new",
+        "currency",
+    ),
     "index_list": (
         "code",
         "name",
@@ -62,6 +109,18 @@ REFERENCE_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+#: 标的基础信息（get_security_info）
+SECURITY_INFO_COLUMNS = (
+    "code",
+    "name",
+    "sec_type",
+    "market",
+    "list_status",
+    "list_date",
+    "delist_date",
+    "currency",
+)
+
 ADJUST_FACTOR_COLUMNS = ("code", "date", "adj_factor")
 ADJUSTMENT_EVENT_COLUMNS = (
     "code",
@@ -69,7 +128,7 @@ ADJUSTMENT_EVENT_COLUMNS = (
     "dividend_per_share",
     "per_share_bonus",
 )
-_DATE_COLUMNS = ("date", "ex_date", "obs_date", "list_date")
+_DATE_COLUMNS = ("date", "ex_date", "obs_date", "list_date", "delist_date", "setup_date")
 
 
 def finalize_frame(

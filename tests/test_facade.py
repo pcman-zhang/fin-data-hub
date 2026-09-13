@@ -22,6 +22,7 @@ class FakeAdapter(BaseAdapter):
             Capability.FUND_NAV,
             Capability.REFERENCE,
             Capability.TRADE_CALENDAR,
+            Capability.SECURITY_INFO,
         }
     )
 
@@ -109,6 +110,23 @@ class FakeAdapter(BaseAdapter):
                     "list_date": None,
                     "market": "O",
                 }
+            ]
+        )
+
+    def fetch_security_info(self, codes):
+        self.calls.append(("security_info", tuple(c.canonical for c in codes)))
+        return pd.DataFrame(
+            [
+                {
+                    "code": code.canonical,
+                    "name": "浦发银行",
+                    "sec_type": "stock",
+                    "market": "SH",
+                    "list_status": "L",
+                    "list_date": "1999-11-10",
+                    "delist_date": None,
+                }
+                for code in codes
             ]
         )
 
@@ -227,6 +245,23 @@ def test_reference_unknown_kind_rejected() -> None:
     hub = make_hub()
     with pytest.raises(ValueError, match="kind"):
         hub.get_reference("unknown_list", source="tushare")
+
+
+def test_security_info_schema_and_currency() -> None:
+    hub = make_hub(adapter=FakeAdapter())
+    df = hub.get_security_info(["600000.SH"], source="tushare")
+    assert list(df.columns) == [
+        "code",
+        "name",
+        "sec_type",
+        "market",
+        "list_status",
+        "list_date",
+        "delist_date",
+        "currency",
+    ]
+    assert df.iloc[0]["currency"] == "CNY"
+    assert str(df["list_date"].dtype) == "datetime64[ns]"
 
 
 def test_schema_missing_column_raises_parse_error() -> None:

@@ -38,6 +38,7 @@ from fin_data_hub.schemas import (
     BARS_COLUMNS,
     CALENDAR_COLUMNS,
     NAV_COLUMNS,
+    SECURITY_INFO_COLUMNS,
     SNAPSHOT_COLUMNS,
     finalize_frame,
     reference_columns,
@@ -329,6 +330,46 @@ class FinDataHub:
             raw = adapter.fetch_reference(kind)
             return finalize_frame(
                 raw, columns=columns, source=resolved, cached=was_cached
+            )
+
+        df = self.cache.get_or_load(key, load, force=force, ttl=ttl)
+        return _with_cached_flag(df, was_cached)
+
+    # ------------------------------------------------------------ 基础信息
+    def get_security_info(
+        self,
+        codes: str | SecCode | Sequence[str | SecCode],
+        *,
+        source: Source | str | None = None,
+        force: bool = False,
+        ttl: float | None = None,
+    ) -> pd.DataFrame:
+        """标的基础信息（按代码）：股票/ETF/LOF/场外基金/指数。"""
+        resolved = self._resolve_source(source)
+        scodes = parse_codes(list(codes) if not isinstance(codes, (str, SecCode)) else codes)
+        if not scodes:
+            raise ValueError("codes 不能为空")
+        adapter = self._adapter(resolved, Capability.SECURITY_INFO)
+        key = (
+            "security_info",
+            str(resolved),
+            tuple(sorted(c.canonical for c in scodes)),
+        )
+        was_cached = (not force) and self.cache.contains(key)
+
+        def load() -> pd.DataFrame:
+            frames = [
+                adapter.fetch_security_info(chunk)
+                for chunk in split_codes(resolved, Capability.SECURITY_INFO, scodes)
+            ]
+            merged = _merge_frames(
+                frames, dedupe_on=("code",), sort_by=("code",)
+            )
+            return finalize_frame(
+                merged,
+                columns=SECURITY_INFO_COLUMNS,
+                source=resolved,
+                cached=was_cached,
             )
 
         df = self.cache.get_or_load(key, load, force=force, ttl=ttl)

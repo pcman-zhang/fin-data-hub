@@ -101,7 +101,8 @@ hub = FinDataHub(config, registry=registry)
 | `get_bars` | ✅ 日线，支持 qfq/hfq | ✅ 股票 / ETF / LOF / 指数 | ⚠️ 仅日线、单代码逐次调用 | ⚠️ 仅指数 |
 | `get_snapshot` | — | — | ✅ 单次 ≤50 代码 | — |
 | `get_fund_nav` | ✅ | ✅ 场外基金 | — | ✅ 多基金合并 |
-| `get_reference` | ✅ 股票 / 基金 / 指数列表 | — | — | — |
+| `get_reference` | ✅ 股票 / 基金 / ETF / 退市 / 申万分类 / 指数列表 | — | — | — |
+| `get_security_info` | ✅ 标的/ETF/基金/指数基础信息（按代码） | — | — | — |
 | `get_trade_calendar` | ✅ | ✅ | — | — |
 | EDB 宏观指标 | — | — | ✅ 精确代码批量 | ✅ 多指标聚合 |
 | 债券行情 | — | — | ✅ 长区间 ≤90 天分块 | — |
@@ -113,6 +114,7 @@ hub = FinDataHub(config, registry=registry)
 - iFinD 的 NL 工具普遍支持多标的/多指标聚合（已抽验 stock/fund/edb），库内合并为一次调用，不做逐标的拆分；单次 50 代码为请求体积的安全上限。
 - AkShare 无参考数据接口；各接口为单标的形式，批量请求由库自动拆分。
 - BaoStock：仅支持 SH/SZ（`sh.600000`/`sz.399006`，含指数）；原生复权不列入 Router 可信源；连接断开会自动重新 login（会话按代际 + 引用计数管理）。
+- Tushare 行情按资产类型路由：股票 `daily`、ETF/LOF `fund_daily`、指数 `index_daily`；复权因子股票走 `adj_factor`、ETF/LOF 走 `fund_adj`（指数无因子，请求复权会明确报错）。
 - Fuyao 一期：`get_snapshot`（批量）、`get_bars`（单标的，窗口 ≤10 年自动分块）、`get_reference`（stock/fund/index 列表）、`get_trade_calendar`（近一年窗口）；当前免费、动态限流（HTTP 429 / code=4001 退避重试）。
 - **Fuyao 原生复权不可用**：其预计算复权序列经对账异常（`doc-4`）。请求复权时 Router 自动组合「Fuyao 原始价 + Tushare 因子」合成（需配置 Tushare；见 doc-5）；直接调用适配器时仅支持 `adjust=None`。
 

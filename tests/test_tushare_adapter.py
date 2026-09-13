@@ -43,6 +43,47 @@ class FakeTushareApi:
             }
         )
 
+    def fund_daily(self, **kwargs):
+        self.calls.append(("fund_daily", kwargs))
+        return pd.DataFrame(
+            {
+                "ts_code": ["510300.SH", "510300.SH"],
+                "trade_date": ["20260105", "20260106"],
+                "open": [4.0, 4.1],
+                "high": [4.1, 4.2],
+                "low": [3.9, 4.0],
+                "close": [4.05, 4.15],
+                "vol": [10000.0, 12000.0],
+                "amount": [4.05, 4.98],
+            }
+        )
+
+    def index_daily(self, **kwargs):
+        self.calls.append(("index_daily", kwargs))
+        return pd.DataFrame(
+            {
+                "ts_code": ["000300.SH", "000300.SH"],
+                "trade_date": ["20260105", "20260106"],
+                "open": [4000.0, 4010.0],
+                "high": [4020.0, 4030.0],
+                "low": [3990.0, 4000.0],
+                "close": [4010.0, 4020.0],
+                "vol": [1_000_000.0, 1_200_000.0],
+                "amount": [4.05e6, 4.98e6],
+            }
+        )
+
+    def fund_adj(self, **kwargs):
+        self.calls.append(("fund_adj", kwargs))
+        codes = kwargs["ts_code"].split(",")
+        return pd.DataFrame(
+            {
+                "ts_code": [code for code in codes for _ in range(2)],
+                "trade_date": ["20260105", "20260106"] * len(codes),
+                "adj_factor": [1.2, 1.5] * len(codes),
+            }
+        )
+
     def fund_nav(self, **kwargs):
         self.calls.append(("fund_nav", kwargs))
         return pd.DataFrame(
@@ -76,6 +117,76 @@ class FakeTushareApi:
                 "management": ["华夏基金"],
                 "list_date": [None],
                 "market": ["O"],
+            }
+        )
+
+    def etf_basic(self, **kwargs):
+        self.calls.append(("etf_basic", kwargs))
+        return pd.DataFrame(
+            {
+                "ts_code": ["510300.SH"],
+                "csname": ["300ETF"],
+                "cname": ["华泰柏瑞沪深300ETF"],
+                "index_code": ["000300.SH"],
+                "index_name": ["沪深300"],
+                "setup_date": ["20120504"],
+                "list_date": ["20120528"],
+                "list_status": ["L"],
+                "exchange": ["SH"],
+                "mgr_name": ["华泰柏瑞"],
+                "custod_name": ["工商银行"],
+                "mgt_fee": [0.5],
+                "etf_type": ["被动"],
+            }
+        )
+
+    def index_classify(self, **kwargs):
+        self.calls.append(("index_classify", kwargs))
+        level = kwargs.get("level", "L1")
+        rows = {
+            "L1": {
+                "index_code": "801010.SI",
+                "industry_name": "农林牧渔",
+                "level": "L1",
+                "industry_code": "110000",
+                "is_pub": "1",
+                "parent_code": "0",
+            },
+            "L2": {
+                "index_code": "801011.SI",
+                "industry_name": "种植业",
+                "level": "L2",
+                "industry_code": "110100",
+                "is_pub": "1",
+                "parent_code": "110000",
+            },
+            "L3": {
+                "index_code": "851011.SI",
+                "industry_name": "粮食种植",
+                "level": "L3",
+                "industry_code": "110101",
+                "is_pub": "0",
+                "parent_code": "110100",
+            },
+        }
+        return pd.DataFrame([{**rows[level], "src": "SW2021"}])
+
+    def index_member_all(self, **kwargs):
+        self.calls.append(("index_member_all", kwargs))
+        is_new = kwargs.get("is_new", "Y")
+        return pd.DataFrame(
+            {
+                "l1_code": ["801010.SI"],
+                "l1_name": ["农林牧渔"],
+                "l2_code": ["801011.SI"],
+                "l2_name": ["种植业"],
+                "l3_code": ["851011.SI"],
+                "l3_name": ["粮食种植"],
+                "ts_code": ["600000.SH"],
+                "name": ["浦发银行"],
+                "in_date": ["20200101"],
+                "out_date": [None if is_new == "Y" else "20240101"],
+                "is_new": [is_new],
             }
         )
 
@@ -164,6 +275,68 @@ def test_bars_qfq_and_hfq() -> None:
     assert hfq["close"].tolist() == pytest.approx([10.3 * 1.5, 10.1 * 2.0])
 
 
+def test_bars_routes_by_asset_type() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_bars(
+        [
+            SecCode.parse("600000.SH"),
+            SecCode.parse("510300.SH"),
+            SecCode.parse("000300.SH"),
+        ],
+        start="20260105",
+        end="20260106",
+        freq="1d",
+        adjust=None,
+        fields=None,
+    )
+    assert [name for name, _ in fake.calls] == ["daily", "fund_daily", "index_daily"]
+    assert sorted(df["code"].unique()) == ["000300.SH", "510300.SH", "600000.SH"]
+    index_rows = df[df["code"] == "000300.SH"]
+    assert index_rows["close"].tolist() == [4010.0, 4020.0]
+
+
+def test_bars_etf_qfq_uses_fund_adj() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_bars(
+        [SecCode.parse("510300.SH")],
+        start="20260105",
+        end="20260106",
+        freq="1d",
+        adjust="qfq",
+        fields=None,
+    )
+    endpoints = [name for name, _ in fake.calls]
+    assert endpoints == ["fund_daily", "fund_adj"]
+    # qfq = close × f / f_latest（latest=1.5）：4.05×0.8；4.15×1
+    assert df["close"].tolist() == pytest.approx([4.05 * 0.8, 4.15])
+
+
+def test_bars_index_adjust_rejected() -> None:
+    adapter, _ = make_adapter()
+    with pytest.raises(UnsupportedCapability, match="无复权因子"):
+        adapter.fetch_bars(
+            [SecCode.parse("000300.SH")],
+            start="20260105",
+            end="20260106",
+            freq="1d",
+            adjust="qfq",
+            fields=None,
+        )
+
+
+def test_bars_otc_fund_rejected() -> None:
+    adapter, _ = make_adapter()
+    with pytest.raises(UnsupportedCapability, match="无日线行情"):
+        adapter.fetch_bars(
+            [SecCode.parse("000001.OF")],
+            start="20260105",
+            end="20260106",
+            freq="1d",
+            adjust=None,
+            fields=None,
+        )
+
+
 def test_bars_unsupported_freq() -> None:
     adapter, _ = make_adapter()
     with pytest.raises(UnsupportedCapability):
@@ -203,6 +376,110 @@ def test_bars_api_error_wrapped() -> None:
             adjust=None,
             fields=None,
         )
+
+
+def test_reference_etf_list() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_reference("etf_list")
+    assert fake.calls[-1][0] == "etf_basic"
+    assert df.iloc[0]["code"] == "510300.SH"
+    assert df.iloc[0]["name"] == "300ETF"
+    assert df.iloc[0]["index_code"] == "000300.SH"
+    assert df.iloc[0]["mgt_fee"] == 0.5
+    assert str(df["setup_date"].dtype) == "datetime64[ns]"
+
+
+def test_reference_delist_list() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_reference("delist_list")
+    name, kwargs = fake.calls[-1]
+    assert name == "stock_basic"
+    assert kwargs["list_status"] == "D"
+    assert df.iloc[0]["code"] == "600000.SH"
+
+
+def test_fetch_security_info_routes_and_types() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_security_info(
+        [
+            SecCode.parse("600000.SH"),
+            SecCode.parse("000001.OF"),
+            SecCode.parse("000300.SH"),
+        ]
+    )
+    assert [name for name, _ in fake.calls] == [
+        "stock_basic",
+        "fund_basic",
+        "index_basic",
+    ]
+    assert list(df.columns) == [
+        "code",
+        "name",
+        "sec_type",
+        "market",
+        "list_status",
+        "list_date",
+        "delist_date",
+    ]
+    assert dict(zip(df["code"], df["sec_type"], strict=True)) == {
+        "600000.SH": "stock",
+        "000001.OF": "fund",
+        "000300.SH": "index",
+    }
+    assert str(df["list_date"].dtype) == "datetime64[ns]"
+
+
+def test_reference_industry_classify_tree() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_reference("industry_classify")
+    levels = [k["level"] for name, k in fake.calls if name == "index_classify"]
+    assert levels == ["L1", "L2", "L3"]
+    assert set(df["level"]) == {"L1", "L2", "L3"}
+    assert list(df.columns) == [
+        "index_code",
+        "name",
+        "level",
+        "industry_code",
+        "parent_code",
+        "is_pub",
+        "src",
+    ]
+    # parent_code 引用上级 industry_code，可组装三级树
+    l1_codes = set(df[df["level"] == "L1"]["industry_code"])
+    l2 = df[df["level"] == "L2"]
+    assert set(l2["parent_code"]) <= l1_codes
+    assert set(df[df["level"] == "L3"]["parent_code"]) <= set(l2["industry_code"])
+
+
+def test_reference_industry_member_history() -> None:
+    adapter, fake = make_adapter()
+    df = adapter.fetch_reference("industry_member")
+    is_new_calls = [k["is_new"] for name, k in fake.calls if name == "index_member_all"]
+    assert is_new_calls == ["Y", "N"]
+    assert list(df.columns) == [
+        "code",
+        "name",
+        "l1_code",
+        "l1_name",
+        "l2_code",
+        "l2_name",
+        "l3_code",
+        "l3_name",
+        "in_date",
+        "out_date",
+        "is_new",
+    ]
+    assert df["out_date"].notna().sum() == 1  # 已剔除记录带 out_date
+    assert str(df["in_date"].dtype) == "datetime64[ns]"
+
+
+def test_fetch_security_info_fund_endpoints_single_code() -> None:
+    # fund_basic / index_basic 不支持逗号多代码 → 逐代码调用
+    adapter, fake = make_adapter()
+    adapter.fetch_security_info(
+        [SecCode.parse("510300.SH"), SecCode.parse("161725.SZ")]
+    )
+    assert [name for name, _ in fake.calls] == ["fund_basic", "fund_basic"]
 
 
 def test_fund_nav_daily_return() -> None:

@@ -91,6 +91,7 @@ class Capability(StrEnum):
     FUND_NAV = "fund_nav"
     REFERENCE = "reference"
     TRADE_CALENDAR = "trade_calendar"
+    SECURITY_INFO = "security_info"
     ADJUST_FACTORS = "adjust_factors"
     ADJUSTMENT_EVENTS = "adjustment_events"
     EDB = "edb"

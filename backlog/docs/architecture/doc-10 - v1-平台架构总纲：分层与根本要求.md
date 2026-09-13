@@ -3,86 +3,166 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-13 12:06'
+updated_date: '2026-09-13 12:11'
 ---
-# v1 平台架构总纲：分层与根本要求
+# v1 平台架构总纲：分层、概念与根本要求
 
-> 状态：评审中 | 关联：doc-2（v1 规划）、doc-6（API 契约）、doc-5（复权路由）、TASK-3.1
-> 说明：本文是 `TASK-3.1` 设计总纲的**第一章**，固化系统分层、依赖约束与横切要求，作为后续数据字典、存储 schema、REST 契约、WebUI 信息架构各定稿物的共同基准。
+> 状态：评审中（第 2 稿） | 关联：doc-2（v1 规划）、doc-5（复权路由）、doc-6（API 契约）、doc-8（对账说明）、TASK-3.1
+> 第 2 稿变更：采纳评审意见——新增 DataPanel 精确定义（§3.1）、Raw→Canonical→Read Model 分层（§3.2）、**Security Master**（§3.3，与 PIT 同级）、Cache 非权威原则（§3.4）、**四时间模型**（§4.1）、**Schema First**（§6.1）；明确 Read Model 为 SDK/REST 唯一读取入口。
 
-## 1. 三层结构
+## 1. 三层结构（概览）
 
 ```
 接入层    FinDataHub（Python 库）  唯一 Adapter 访问面；只做归一化，不存数据
            ▲ 仅「采集/回填」可调用
 
 数据层    控制面 | 调度 / 质量检查 / 数据字典与血缘 / 任务与配额观测
-          数据面 | DataPanel（PIT 双时间轴）→ TimescaleDB；DuckDB 批量派生与扫描
-          缓存   | L1 进程内 + L2 Redis（横切能力，非独立层）
+          数据面 | Security Master + DataPanel（Raw→Canonical→Read Model）→ TimescaleDB；DuckDB 批量派生
+          缓存   | L1 进程内 + L2 Redis（横切；非权威）
 
 服务层    FinDataPlatform（SDK 优先）
-          SDK 直连只读读模型/副本（原生 as-of）；REST 薄封装；WebUI 基于 REST；批量导出
+          SDK 只读 Read Model（原生 as-of）；REST 薄封装；WebUI 基于 REST；批量导出
 ```
 
-### 1.1 接入层：FinDataHub（采集内核）
+## 2. 层间依赖与写入边界（硬约束）
 
-- 定位：**唯一数据源访问平面**（数据源在它之后），只负责代码/参数/响应归一化、限流与成本计量；
-- 不承担存储、缓存共享、PIT 计算；
-- 平台内部**唯一**允许调用它的组件是采集/回填（ingestion）；其余组件一律走数据层。
+1. **单向依赖**：`FinDataHub → 平台写入端 → Canonical → Read Model → SDK/REST/WebUI`；
+2. **禁止**：平台直连 Adapter；WebUI 直连 DB/SDK；SDK/REST 直读 Raw/Canonical 物理表；跨层反向依赖；
+3. **写入面**仅限平台内部写入端（ingestion / 派生计算 / 文件导入 / 质量结果），按 schema 最小授权，读写 DSN 分离；对外一律无写入。
 
-### 1.2 数据层
+## 3. 数据层核心概念
 
-- **控制面**：采集调度、数据质量检查、数据字典与血缘、任务运行与配额观测；
-- **数据面**：DataPanel 组织数据域，统一 PIT 双时间轴；TimescaleDB 持久化；DuckDB 做批量派生、质量扫描与导出加工（非缓存、非真源）；
-- **缓存（横切）**：L1 进程内、L2 Redis（API/调度共享）；PIT 安全键、代际失效、fail-open；**SDK 直连 DB 模式不经过 Redis**。
+### 3.1 DataPanel = 逻辑数据集（Logical Dataset）
 
-### 1.3 服务层：FinDataPlatform
+**定义**：DataPanel 是**一个有 schema、有 PIT 语义、有字典条目、有质量规则与 SLA 的逻辑数据集**，命名 `{domain}.{dataset}`。
 
-- SDK 优先：直连**只读读模型/只读副本**，原生 `as-of` 参数与元数据；
-- REST 是 SDK 的薄封装（鉴权/审计/限流/压缩/Arrow）；WebUI 基于 REST；
-- 批量导出与研究快照为高吞吐专用通道；
-- 对外**不提供数据写入**；写入仅平台内部写入端。
+- `DataDomain`（市场平面）= 命名空间：`cn_equity / cn_fund / cn_futures / cn_options / hk_equity / us_equity / us_options / macro`；
+- DataPanel 是数据域下的**一级实体**：唯一 ID、schema 版本、PIT 类别、主键、更新频率、血缘与质量规则；
+- 存储映射（物理表/分区/压缩策略）、派生血缘、读模型与 SDK 方法**均引用 DataPanel ID**；
+- **明确排除**：DataPanel ≠ 存储系统 ≠ 数据库 schema ≠ 市场平面 ≠ 物理表集合；主结构只有 **DataDomain → DataPanel** 两级，不引入第三级 `DataSet` 概念（如需分组用 tag/子域，不改主结构）。
 
-### 1.4 层间依赖规则（硬约束）
+示例：
 
-1. 单向依赖：`FinDataHub → 平台写入端 → 读模型 → SDK/REST/WebUI`；
-2. 禁止：平台直连 Adapter、WebUI 直连 DB/SDK、外部直写数据表、跨层反向依赖；
-3. 写入面仅限平台内部：ingestion / 派生计算 / 文件导入 / 质量结果（按 schema 最小授权，读写 DSN 分离）。
+| DataPanel | 说明 |
+|---|---|
+| `cn_equity.daily_bar` | A 股日线行情（raw + factor 口径） |
+| `cn_equity.adj_factor` | 复权因子（版本化） |
+| `cn_equity.index_member` | 指数成分（区间型 PIT） |
+| `cn_equity.financials.balance_sheet` | 资产负债表（append-only 版本） |
+| `cn_equity.market_events.namechange` | 名称变更（闭区间） |
+| `cn_fund.nav` | 场外基金净值 |
+| `macro.cn_rate` | 宏观利率序列 |
 
-## 2. 根本要求
+### 3.2 数据分层：Raw → Canonical → Read Model
 
-### 2.1 数据准确
+| 层 | 示例 | 职责 | 写入方 | 读者 |
+|---|---|---|---|---|
+| **Raw Layer** | `raw_stock_daily` | 源端原始响应落地（源字段与语义不变）；审计、重放、对账；append-only | 采集 | 审计/对账工具（SDK/REST 不可见） |
+| **Canonical Layer** | `equity_daily_bar` | 归一化统一资产表：标准字段/单位/枚举/代码 + PIT 字段；跨源合并、口径对齐、复权与派生 | 采集 + 派生 | 派生计算、质量检查、内部读 |
+| **Read Model** | `mart.equity_daily_bar_v1`（视图/物化视图） | 面向消费的稳定接口层：字段与口径冻结、语义版本化、as-of 视图、权限裁剪 | 由 Canonical 派生 | **SDK / REST / WebUI / 导出（唯一读取入口）** |
 
-- 约束检查：唯一性、完整性、取值范围、枚举、引用完整性；
-- 跨源对账：换源/迁移前必跑（对账框架见 TASK-4.1，方法与结论索引见 doc-8）；
-- 派生数据：公式与依赖登记在数据字典，重算可复现；
-- 质量结果入库并生成报告（WebUI 可浏览，支持分级告警）。
+规则：
 
-### 2.2 数据新鲜（可度量）
+1. **SDK/REST 只读 Read Model**，不直读 Raw/Canonical 物理表（防耦合）；
+2. **换源不影响 SDK**：源差异（Wind/Tushare/AkShare/…）在 Raw→Canonical 之间被吸收，Raw 保留完整溯源；
+3. Read Model **版本化**（`_v1` 冻结后只增不改），字段变更走弃用流程；
+4. Read Model 是**权威数据的投影**，非缓存：缓存只加速，不改变读取语义（§3.4）。
 
-- 每个数据集定义 **SLA**：更新频率 + 最早/最晚可用时点 + 容忍延迟；
-- 采集侧记录 `job_runs` 与数据集 **watermark**（最近成功数据时点 / 知识时点）；
+### 3.3 Security Master（平台基石，与 PIT 同级）
+
+**职责**：全域标的注册与标识治理——股票 / ETF / LOF / 场外基金 / 指数 / 期货 / 期权 / 债券。
+
+- **标识**：平台内部稳定 `security_id`（主键）；业务键为 canonical code（WindCode）；多源代码通过别名表映射：
+  `security_alias(security_id, source, source_code, valid_from, valid_to)`——同一标的的 Tushare/AkShare/Wind/Fuyao 代码统一挂靠；
+- **生命周期**：`list_date / delist_date / status`（含退市永久保留）→ as-of 宇宙重建；
+- **属性版本（SCD2）**：名称（namechange）、ST 状态、市场板块、类型变更按生效区间留痕；
+- **逻辑表**：`security_master` / `security_alias` / `security_status_history` / `security_attribute_history`；
+- **与接入层关系**：FinDataHub 提供 canonical 映射与基础信息（含 `delist_list`），平台 Security Master 持久化全量并维护多源别名；
+- **强制约束**：任何数据集必须能通过 `security_id` 挂到 Security Master（行情/财务/成分/派生/事件皆然）。
+
+### 3.4 Cache 非权威原则（Cache Never Owns Data）
+
+1. 缓存（L1/L2）**永远不是权威数据源**：清空后可完全由权威层重建；
+2. **禁止仅存于缓存的业务状态**（分布式锁等协调原语除外，且不视为数据）；
+3. 键必须 **PIT 安全**（含 as-of / 版本 / 口径维度），失效方式：代际失效 + 按域主动失效；
+4. **fail-open**：缓存不可用时直读权威层，正确性不受影响；
+5. SDK 直连 DB 模式不经 Redis（可选本地进程缓存）。
+
+## 4. PIT：四时间模型
+
+### 4.1 四个时间
+
+| 时间 | 含义 | 典型场景 |
+|---|---|---|
+| `event_time` | 事件发生/归属时间 | 交易日、报告期末 `report_period`、除权日 |
+| `publish_time` | **官方/权威发布时间** | 上市公司公告时间、指数公司公布时间 |
+| `knowledge_time` | **平台获知时间**（该版本首次进入平台） | 采集完成时刻 |
+| `ingest_time` | 物理入库时间（审计/运维） | DB 写入时刻 |
+
+说明：`publish_time` 与 `knowledge_time` 必须分开——公告 21:00 发布、平台次日 02:00 采集，两者语义不同；只存其一会在后期产生口径争议与补救成本。
+
+### 4.2 查询与版本语义
+
+- as-of 默认：`knowledge_time <= as_of` 后取每键最新版本；
+- 需要"官方可得"更严语义时：`publish_time <= as_of`（且记录 `knowledge_time >= publish_time`）；
+- 不传 as_of = 当前 `is_latest` 视图；
+- append-only + `version` + `is_latest`；更正不回写历史；重述以新版本表达。
+
+### 4.3 PIT 三要素（缺一不可）
+
+1. **完整宇宙**：含退市标的（`list_date/delist_date`）；名称 / ST / 停牌 / 成分按生效区间留痕；
+2. **区间与版本**：属性 SCD2、成分 in/out、财务 append-only 版本；
+3. **as-of 计算纪律**：复权价按 as-of 基准日由 raw + factor 计算（不落全量 qfq 快照）；派生数据以 as-of 输入计算并支持重述重算；**禁止前视 join**（按知识/发布时间过滤）。
+
+## 5. 根本要求
+
+### 5.1 数据准确
+
+- 约束检查（唯一/完整/范围/枚举/引用）；跨源对账（TASK-4.1，方法见 doc-8）；
+- 派生公式与依赖登记于数据字典，重算可复现；质量结果入库并生成报告（WebUI 可浏览、分级告警）。
+
+### 5.2 数据新鲜（可度量）
+
+- 每数据集定义 **SLA**：更新频率 + 最早/最晚可用时点 + 容忍延迟；
+- 采集侧记录 `job_runs` 与 **watermark**（最近成功数据时点/知识时点）；
 - 指标：`last_success_at`、数据龄 lag、覆盖率、缺口数；
-- 按域分级告警，WebUI 展示实时新鲜度面板。
+- 分级告警 + WebUI 新鲜度面板。
 
-### 2.3 PIT 对齐（三要素，缺一不可）
+## 6. 架构原则
 
-1. **双时间轴与版本**：`event_time × knowledge_time`、`ingest_ts`、`version`、`is_latest`；append-only，不覆盖历史（详见 doc-2 §6.9）；
-2. **完整宇宙**：含退市标的（`list_date/delist_date`）；名称（namechange）、ST、停牌、成分（in/out）按生效区间留痕；
-3. **as-of 计算纪律**：复权价按 as-of 基准日由 raw + factor 计算（不落全量 qfq 快照）；派生数据以 as-of 输入计算并支持重述重算；禁止前视 join（成分/财务/公告按知识时间过滤）。
+### 6.1 Schema First：Dictionary → Schema → SDK/API
 
-## 3. 补充要求
+- **数据字典（机读）是唯一事实源**：数据集/字段/类型/单位/PIT 类别/约束/血缘/派生公式/覆盖率/SLA；
+- DDL、归一化 spec、SDK 模型、REST schema、文档**由字典生成或经 CI 强校验一致**；
+- 变更流程：字典 → schema → 代码/迁移 → 弃用公告；**禁止"代码先写、文档后补"**；
+- 平台生命周期以 5~10 年计，Schema First 的长期收益远大于成本。
 
-- **可审计 / 可复现**：血缘、版本、口径登记三件套；任何对外数值可回溯到源与计算过程；
-- **可扩展**：市场平面插件化（cn_equity / cn_fund / cn_futures / cn_options / hk_equity / us_equity / us_options，宏观单一平面），共享 Security Master / PIT / 字典 / 质量 / 存储 / SDK；
-- **成本与权限**：付费源按调用计量；凭证三面（内部写入读凭证、SDK 只读 DB 角色、REST API Key 作用域 `read/export/admin`），不落镜像；
-- **部署**：单机 Docker Compose（已定，无需 K8s）。
+### 6.2 依赖与写入硬约束
 
-## 4. 与既有决策及任务的关系
+同 §2：单向依赖、对外无写入、内部写入端最小授权。
 
-- 决策来源：doc-2 §6.1~§6.17（调度/缓存/DuckDB/SDK 优先/权限/PIT/市场平面/存储模块/时序能力等），本文不重复细节，只固化层级与横切要求；
-- 任务落位：
-  - 控制面：TASK-3.2（字典）、3.5（质量）、3.6（调度）、3.9（Redis 缓存）；
-  - 数据面：TASK-3.3（存储）、3.12（派生）、3.13（时序查询）；
-  - 服务层：TASK-3.7（REST）、3.8（WebUI）、3.10（导出/快照）、3.11（SDK 发布）；
-  - 横切：TASK-3.4（部署）、TASK-4.1（对账框架）。
+### 6.3 成本与权限
+
+付费源按调用计量；凭证三面（内部写入 / SDK 只读 DB 角色 / REST API Key `read/export/admin`），不落镜像。
+
+## 7. 补充要求
+
+- **可审计/可复现**：血缘 + 版本 + 口径登记，任一对外数值可回溯至源与计算过程；
+- **可扩展**：市场平面插件化（DataDomain 新增不改核心）；DuckDB 批量派生与扫描（非缓存、非真源）；
+- **部署**：单机 Docker Compose（已定），无需 K8s。
+
+## 8. 任务落位映射
+
+| 层/概念 | 任务 |
+|---|---|
+| 数据字典 / Schema First | TASK-3.2 |
+| 存储（Raw/Canonical/Read Model 落地、分区迁移） | TASK-3.3 |
+| Security Master | **待定：建议新增 TASK-3.14（评审后确认）** |
+| 质量与新鲜度 SLA | TASK-3.5 |
+| 调度与 watermark | TASK-3.6 |
+| Redis 缓存（非权威） | TASK-3.9 |
+| 派生计算与重述 | TASK-3.12 |
+| 时序查询（as-of/频率/缺口/vintage） | TASK-3.13 |
+| REST / WebUI / 导出 / SDK 发布 | TASK-3.7 / 3.8 / 3.10 / 3.11 |
+| 部署 | TASK-3.4 |
+| 对账框架 | TASK-4.1 |

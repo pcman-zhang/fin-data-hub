@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 11:36'
+updated_date: '2026-09-13 12:11'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 
@@ -176,7 +176,7 @@ docker/                  # 镜像与 compose（单机）
   - **指数成分/权重**：生效区间（in_date / out_date）+ SCD2 维度。
   - **公告/新闻**：知识时间 = 发布时间（datetime 精度）。
   - **基金持仓/份额**：披露滞后，知识时间 = 公告日。
-- **标准字段**：`event_date` / `report_period`（事件时间）、`knowledge_date` / `publish_date`（知识时间）、`ingest_ts`、`version`、`is_latest`、`source`。
+- **标准字段（四时间模型，详见 doc-10 §4）**：`event_time`（事件时间，含 `report_period`）、`publish_time`（官方发布时间）、`knowledge_time`（平台获知时间）、`ingest_time`（入库时间）、`version`、`is_latest`、`source`。
 - **查询语义**：`as_of` 过滤 `knowledge_date <= as_of` 后取每键最新版本；不传 `as_of` 即"当前最新"；更正不回写历史（append-only）。
 - **PIT 宇宙（Security Master 必须含退市标的）**：`as_of` 时点标的池 =
   `list_date <= as_of AND (delist_date IS NULL OR delist_date > as_of)`；

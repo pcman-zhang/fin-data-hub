@@ -3,7 +3,7 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-13 12:14'
+updated_date: '2026-09-13 12:16'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
@@ -170,9 +170,9 @@ updated_date: '2026-09-13 12:14'
 
 | 层/概念 | 任务 |
 |---|---|
-| 数据字典 / Schema First | TASK-3.2 |
+| 数据字典 / Schema First | TASK-3.2（规范：doc-11） |
 | 存储（Raw/Canonical/Read Model 落地、分区迁移） | TASK-3.3 |
-| Security Master | **待定：建议新增 TASK-3.14（评审后确认）** |
+| Security Master | TASK-3.14 |
 | 质量与新鲜度 SLA | TASK-3.5 |
 | 调度与 watermark | TASK-3.6 |
 | Redis 缓存（非权威） | TASK-3.9 |

@@ -4,7 +4,7 @@ title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 /
 status: In Progress
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 12:14'
+updated_date: '2026-09-13 12:16'
 labels: []
 milestone: m-0
 dependencies: []
@@ -65,4 +65,6 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 第 2 稿（2026-09-13，采纳评审）：新增 §3.1 DataPanel=逻辑数据集、§3.2 Raw→Canonical→Read Model（SDK/REST 只读 Read Model）、§3.3 Security Master（与 PIT 同级，security_id + 多源别名 + SCD2）、§3.4 Cache 非权威、§4.1 四时间模型（event/publish/knowledge/ingest）、§6.1 Schema First（Dictionary→Schema→SDK/API）。doc-2 §6.9 标准字段同步为四时间命名。待确认：Security Master 是否新增 TASK-3.14。
 
 第 3 稿（2026-09-13，采纳评审）：Read Model 语义版本化（字段兼容≠语义兼容，加字段不升版、口径变化升版）；宏观分域 macro_cn/macro_us/macro_global（防垃圾桶）；新增 §6.2 Source Independence Principle（canonical/read model 禁供应商特有字段，provider 维度 + Raw 层例外 + CI 校验）。doc-2 §6.11 同步宏观分域。
+
+数据字典规范第 1 稿（2026-09-13，doc-11）：YAML + Pydantic 元 schema；dataset/field 两级结构（含 SLA/coverage/quality/lineage/derived/source_mappings）；安全公式子集；CI 强制校验（provider 无关/语义版本/一致性）；生成物映射与变更流程；待评审：格式（YAML vs TOML）、文件粒度、公式 DSL 边界、派生登记范围。TASK-3.14 Security Master 已建。
 <!-- SECTION:NOTES:END -->

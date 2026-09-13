@@ -4,7 +4,7 @@ title: 派生数据计算与血缘：as-of 输入 / 重述重算 / DuckDB 批量
 status: To Do
 assignee: []
 created_date: '2026-09-13 08:50'
-updated_date: '2026-09-13 09:25'
+updated_date: '2026-09-13 12:26'
 labels: []
 milestone: m-0
 dependencies:
@@ -32,4 +32,6 @@ ordinal: 33000
 
 <!-- SECTION:NOTES:BEGIN -->
 复权因子推导（事件→累计因子）属派生管线；需与 Tushare adj_factor / Fuyao 预计算复权价对账（doc-2 §6.16）。
+
+算法登记方案（2026-09-13，doc-11 §4）：派生指标代码实现 + @register(id, version)，字典登记 output/algorithm_id/implementation/owner/inputs/description；算法升级=新 algorithm_id（历史永久保留）；派生结果记录 algorithm_id 以审计回溯；CI 校验 id 唯一/实现可导入/docstring 含 Formula+PIT/inputs 存在。
 <!-- SECTION:NOTES:END -->

@@ -4,7 +4,7 @@ title: 采集调度与增量同步：定时 / 重试 / 补数 / 可观测
 status: To Do
 assignee: []
 created_date: '2026-09-13 06:01'
-updated_date: '2026-09-13 06:17'
+updated_date: '2026-09-13 12:54'
 labels: []
 milestone: m-0
 dependencies:
@@ -26,3 +26,9 @@ ordinal: 25000
 - [ ] #2 运行记录可查询（任务/窗口/耗时/结果）
 - [ ] #3 限流与成本预算在平台侧持续生效
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+通知能力（2026-09-13，暂不制作）：调度/质量/新鲜度告警的主动通知见 doc-16（飞书等渠道）；首期不实现，依赖 WebUI 查看。
+<!-- SECTION:NOTES:END -->

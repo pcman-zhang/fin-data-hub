@@ -3,7 +3,7 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-13 12:16'
+updated_date: '2026-09-13 12:56'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
@@ -110,7 +110,7 @@ updated_date: '2026-09-13 12:16'
 - as-of 默认：`knowledge_time <= as_of` 后取每键最新版本；
 - 需要"官方可得"更严语义时：`publish_time <= as_of`（且记录 `knowledge_time >= publish_time`）；
 - 不传 as_of = 当前 `is_latest` 视图；
-- append-only + `version` + `is_latest`；更正不回写历史；重述以新版本表达。
+- append-only + `version` + `is_latest`；更正不回写历史；重述以新版本表达。`is_latest` 为**读侧派生**（Read Model 计算/物化），Canonical 只存 `version / knowledge_time`（doc-13 §4）。
 
 ### 4.3 PIT 三要素（缺一不可）
 

@@ -4,7 +4,7 @@ title: 管理型 WebUI：数据域 / 同步状态 / 质量报告 / 字典浏览 
 status: To Do
 assignee: []
 created_date: '2026-09-13 06:07'
-updated_date: '2026-09-13 08:24'
+updated_date: '2026-09-13 12:54'
 labels: []
 milestone: m-0
 dependencies:
@@ -27,3 +27,11 @@ ordinal: 27000
 - [ ] #2 权限与审计接入平台鉴权体系
 - [ ] #3 随 docker compose 一键部署可用
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+范围收敛（2026-09-13，个人平台定位）：认证/授权/SSO 属于生产级能力，分离至 doc-15《认证与授权（增强功能，暂不制作）》；首期 WebUI 仅本机 127.0.0.1、无账号体系；保留高风险操作二次确认与最小事件日志。
+
+决策（2026-09-13）：事件日志不保留（个人平台首期）；通知渠道独立为 doc-16（飞书等，暂不制作）。
+<!-- SECTION:NOTES:END -->

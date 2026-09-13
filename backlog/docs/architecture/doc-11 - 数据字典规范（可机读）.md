@@ -3,11 +3,14 @@ id: doc-11
 title: 数据字典规范（可机读）
 type: specification
 created_date: '2026-09-13 12:16'
-updated_date: '2026-09-13 12:19'
+updated_date: '2026-09-13 12:45'
 ---
 # 数据字典规范（可机读）
 
-> 状态：评审中（第 2 稿） | 关联：doc-10（架构总纲 §6.1 Schema First）、TASK-3.1/3.2/3.12/3.14
+> 状态：**已冻结**（2026-09-13，第 4 稿） | 关联：doc-10（架构总纲 §6.1 Schema First）、TASK-3.1/3.2/3.12/3.14
+> 冻结稿修订（2026-09-13，由 doc-13 评审引入）：`storage` 字段改为 `{canonical_table, read_model, read_model_impl, partition_strategy, partition_interval, retention, compression}`（compression 语义一致性 CI 见 doc-13 §3.4）；`is_latest` 不在 Canonical 落列（读侧派生）。
+> 第 4 稿变更：派生指标改为**代码实现 + `algorithm_id` 登记**（无描述表达式）；新增算法注册/审计约定与三方一致性 CI。
+> 第 3 稿变更：§10 四项决策落定——YAML；**每数据集一文件**（目录即域，避免单文件 5000+ 行无法 review）；expression 首期仅比较/逻辑/算术（窗口/聚合/join 归派生引擎）；mappings 不含单位换算（归适配器 spec）。
 > 第 2 稿变更（采纳评审）：① `semantic_version` 为整数（仅主版本）；② decimal 必带 `precision/scale`；③ 拆 `business_key` / `physical_key`；④ 质量规则支持**跨字段表达式**；⑤ `source_mappings` 移出 field，改为 dataset 级 `mappings`；⑥ `coverage` 增加可计算维度；⑦ `lineage` 强制；⑧ **字典不登记公式**——派生仅登记 `inputs/output/owner`，公式归 TASK-3.12 派生引擎。
 
 ## 1. 原则
@@ -20,11 +23,28 @@ updated_date: '2026-09-13 12:19'
 6. **公式不入字典**：字典只登记派生依赖（`inputs/output/owner`）；公式文本、版本与重算策略由 TASK-3.12 派生引擎注册表管理，避免出现两套 DSL；
 7. **机读优先**：可被程序解析、校验、生成；人读文档由字典渲染。
 
-## 2. 文件形态与目录
+## 2. 文件形态与目录（已定）
 
-- 格式：**YAML** + **Pydantic v2** 严格校验；元 schema 由模型导出（JSON Schema，CI 双向校验）；
-- 目录：`platform/dictionary/<domain>.yaml`（每域一文件）；元 schema：`platform/dictionary/_schema/dictionary.schema.json`；
-- 命名：`dataset` = `{domain}.{dataset}`（小写蛇形）；字段小写蛇形、禁止源前缀；provider 维度用 `mappings`/`provider` 字段表达。
+- 格式：**YAML**（嵌套深——lineage/coverage/mappings；TOML 可读性不足）+ **Pydantic v2** 严格校验；元 schema 由模型导出（JSON Schema，CI 双向校验）；
+- **每数据集一文件**（不做每域一文件：单域 50+ DataPanel 会到 5000+ 行，无法 code review）：
+  一个 YAML 文件 = 一个 dataset 条目，文件名 = 数据集末段，目录 = 数据域：
+
+```
+platform/dictionary/
+  _schema/dictionary.schema.json
+  cn_equity/
+    daily_bar.yaml          # cn_equity.daily_bar
+    adj_factor.yaml         # cn_equity.adj_factor
+    index_member.yaml       # cn_equity.index_member
+    financials/
+      balance_sheet.yaml    # cn_equity.financials.balance_sheet（子类建子目录，仍一数据集一文件）
+  cn_fund/
+    nav.yaml                # cn_fund.nav
+  macro_cn/
+    rate.yaml               # macro_cn.rate
+```
+
+- 命名：`dataset` = `{domain}.{dataset}`（小写蛇形）；文件路径必须与 dataset 一致（CI 校验）；字段小写蛇形、禁止源前缀。
 
 ## 3. 条目结构（meta-schema）
 
@@ -43,10 +63,10 @@ updated_date: '2026-09-13 12:19'
 | `update_sla` | obj | ✅ | `{frequency, earliest_available, latest_available, tolerance}` |
 | `sources` | [obj] | ✅ | `[{provider, endpoint, note?}]`（采集入口） |
 | `coverage` | obj | ✅ | `{universe, universe_source, history_start, expected_dates}`（可计算覆盖率，见 §3.3） |
-| `storage` | obj | ✅ | `{canonical_table, read_model, partition_by, retention}` |
+| `storage` | obj | ✅ | `{canonical_table, read_model, read_model_impl, partition_strategy, partition_interval, retention, compression}`（见 doc-13） |
 | `quality` | [obj] | ✅ | 规则列表（§3.4，含跨字段表达式） |
 | `lineage` | obj | ✅ | `{upstream: [{dataset, fields?}], transform}`（源数据为 `upstream: []` + `transform: raw`） |
-| `derived` | [obj] | | 派生登记：`[{output, inputs, owner}]`（**不含公式**） |
+| `derived` | [obj] | | 派生登记：`[{output, algorithm_id, implementation, owner, inputs, description}]`（**代码实现，无公式文本**，见 §4） |
 | `mappings` | [obj] | ✅ | 源映射：`[{provider, endpoint, fields: {canonical: source}}]`（§3.5） |
 | `fields` | [obj] | ✅ | 字段列表（§3.2） |
 
@@ -86,7 +106,7 @@ coverage:
 | `not_null` | `fields` | |
 | `range` | `field, min, max` | `volume >= 0` |
 | `enum` | `field, values` | |
-| `expression` | `expr, severity` | `expr: "high >= low and low <= close <= high"`；`expr: "amount >= 0"` |
+| `expression` | `expr, severity` | `expr: "high >= low and low <= close <= high"`；**首期仅比较/逻辑/算术 + 显式字段引用**；禁 window/aggregate/join（归派生引擎） |
 | `reconcile` | `against` | 与 Raw/外部源对账（TASK-4.1） |
 | `freshness` | `sla, tolerance` | |
 
@@ -109,22 +129,52 @@ mappings:
       volume: volume
 ```
 
-- 每个 provider 一段映射；canonical 字段 → 源字段（含单位换算标注可后续扩展）；
+- 每个 provider 一段映射；canonical 字段 → 源字段 **仅字段名**；
+- **不含单位换算/枚举映射**：换算由**适配器 spec（v0）**负责；字典只描述最终 canonical 语义；
 - field 级不再出现 `source_mappings`，避免单字段挂 100+ 源映射导致的膨胀；
 - 与 v0 `fin_data_hub/specs/*.toml` 交叉校验：平台 `mappings` ⊇ 适配器映射。
 
-## 4. 派生数据：只登记依赖，不登记公式
+## 4. 派生数据：代码实现 + 算法登记（无描述表达式）
+
+派生指标一律以**代码实现**（附结构化注释、性能可控、可测试），字典登记算法元数据：
 
 ```yaml
 derived:
   - output: qfq_close
-    inputs: [cn_equity.daily_bar.close, cn_equity.adj_factor.adj_factor]
+    algorithm_id: qfq_close_v1
+    implementation: finplatform.derived.price.qfq_close
     owner: derived-engine
+    inputs:
+      - cn_equity.daily_bar.close
+      - cn_equity.adj_factor.adj_factor
+    description: 前复权收盘价
 ```
 
-- 公式文本、版本、重算与 as-of 策略：由 **TASK-3.12 派生引擎**的注册表管理（单一语言，DuckDB SQL/引擎函数）；
-- 字典职责：血缘 + 依赖关系 + 输出字段 + 责任方；CI 校验 inputs 存在、血缘无环；
-- 理由：窗口/跨表/横截面/中性化等需求会让"字典公式"演变成半个 SQL，形成两套语言（DSL vs SQL）的维护灾难。
+规则：
+
+1. **`algorithm_id`**：稳定**审计标识**；算法升级 = **新增 id**（`pe_ttm_v1` → `pe_ttm_v2`、`barra_beta_v1` → `barra_beta_v2`），旧 id 与旧实现永久保留、可复现，禁止原地覆盖；
+2. **`implementation`**：可导入的代码路径；函数以注册装饰器声明 id/version（见下）；
+3. **`inputs`**：输入 `dataset.field`；as-of 语义与重算由派生引擎保证（TASK-3.12）；
+4. **不用描述型表达式**作为派生实现，避免"字典 DSL vs 代码"双轨；`quality.expression` 仅服务质量规则；
+5. **审计**：派生结果表记录 `algorithm_id`（+ 输入版本），任何数值可回溯至具体算法版本与输入版本。
+
+代码侧约定（三者统一：字典元数据 / 注册表 / docstring）：
+
+```python
+@register(id="qfq_close_v1", version=1)
+def qfq_close(close, adj_factor):
+    """前复权收盘价
+
+    Formula:
+        close * factor / latest_factor
+    PIT:
+        knowledge_time
+    Notes:
+        不落快照；as-of 实时计算
+    """
+```
+
+CI 校验：`algorithm_id` 全局唯一且不复用；`implementation` 可导入；docstring 含 `Formula`/`PIT` 段落；`inputs` 存在；历史 id 不得删除。
 
 ## 5. 完整示例：`cn_equity.daily_bar`
 
@@ -157,8 +207,14 @@ coverage:
 storage:
   canonical_table: cn_equity.daily_bar
   read_model: mart.equity_daily_bar_v1
-  partition_by: trade_date(月)
+  read_model_impl: view            # view | projection_table（doc-13 §1.1）
+  partition_strategy: event_time   # event_time | knowledge_time | none（doc-13 §3.1）
+  partition_interval: 1 month
   retention: all
+  compression:                     # 仅已封口 chunk；不得改变查询语义（doc-13 §3.4）
+    after: 7 days
+    segment_by: security_id
+    order_by: trade_date
 quality:
   - rule: unique
     keys: [security_id, trade_date]
@@ -175,8 +231,13 @@ lineage:
   transform: raw
 derived:
   - output: qfq_close
-    inputs: [cn_equity.daily_bar.close, cn_equity.adj_factor.adj_factor]
+    algorithm_id: qfq_close_v1
+    implementation: finplatform.derived.price.qfq_close
     owner: derived-engine
+    inputs:
+      - cn_equity.daily_bar.close
+      - cn_equity.adj_factor.adj_factor
+    description: 前复权收盘价
 mappings:
   - provider: tushare
     endpoint: daily
@@ -258,7 +319,9 @@ fields:
 5. `business_key` 与 `physical_key` 齐备，`physical_key ⊇ business_key + knowledge_time + version`；
 6. `lineage` 必填（源数据显式 `raw`）；血缘无环、上游存在；`derived.inputs` 存在；
 7. `quality.expression` 可解析且字段存在；`coverage` 四要素完整可计算；
-8. `mappings` 与 v0 归一化 spec 交叉校验（平台 ⊇ 适配器）；`storage.read_model` 语义版本化。
+8. `mappings` 与 v0 归一化 spec 交叉校验（平台 ⊇ 适配器，仅字段名）；换算/枚举映射缺失即为 CI 失败；`storage.read_model` 语义版本化；`storage.partition_strategy` 与 `pit_class` 默认规则一致（覆盖需注释）；
+9. 文件路径与 `dataset` 一致（每数据集一文件）；单文件不得包含多个 dataset；
+10. `derived`：`algorithm_id` 全局唯一且不可复用；`implementation` 可导入且 docstring 含 `Formula/PIT`；`inputs` 存在；历史 id 不得删除。
 
 ## 7. 生成物与消费方
 
@@ -284,9 +347,12 @@ fields:
 - 平台 `mappings`（dataset 级）：平台契约侧的源映射登记；
 - 关系：CI 保证"平台 mappings ⊇ 适配器 spec"，两处映射漂移即失败。
 
-## 10. 待评审决策
+## 10. 决策记录（2026-09-13，已定）
 
-1. 格式：YAML（推荐）vs TOML；
-2. 文件粒度：每域一文件（推荐）vs 每数据集一文件；
-3. `quality.expression` 与派生引擎共用表达式语言的首期范围（建议：比较/逻辑/算术 + 显式字段引用；聚合/窗口后置）；
-4. `mappings.fields` 是否需要记录单位换算与枚举映射（建议首期只记字段名，换算在适配器 spec）。
+| # | 决策 | 理由 |
+|---|---|---|
+| 1 | 格式 = **YAML** | lineage/coverage/mappings 嵌套深，TOML 可读性不足 |
+| 2 | **每数据集一文件**（目录=域） | 单域 50+ DataPanel 大文件无法 review；一文件一条目，diff 最小 |
+| 3 | expression 首期仅**比较/逻辑/算术** + 显式字段引用 | 窗口/聚合/join 属派生引擎职责，避免质量 DSL 与引擎双语言 |
+| 4 | `mappings` **不含单位换算** | 换算归适配器 spec；字典只描述最终 canonical 语义 |
+| 5 | 派生指标 = **代码实现 + `algorithm_id`**（不用描述表达式） | 代码可注释/高效；id 为审计标识，升级新增 id、历史不消失 |

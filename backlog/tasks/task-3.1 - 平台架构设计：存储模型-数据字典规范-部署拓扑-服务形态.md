@@ -1,10 +1,10 @@
 ---
 id: TASK-3.1
 title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 / WebUI
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 12:19'
+updated_date: '2026-09-13 12:56'
 labels: []
 milestone: m-0
 dependencies: []
@@ -20,15 +20,12 @@ ordinal: 20000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 设计文档评审通过；明确首批数据域与优先级
-- [ ] #2 数据字典 schema 与派生指标表达规范定稿（可机读）
-- [ ] #3 部署拓扑与配置/凭证注入方案定稿（不落镜像）
-- [ ] #4 输出任务拆分与里程碑排期
-- [ ] #5 设计文档评审通过；首批数据域与优先级明确
-- [ ] #6 FinDataPlatform REST 契约与 PIT（as-of）语义定稿
-- [ ] #7 DataSource/Adapter 扩展接口与目录结构定稿（platform/ 方案）
-- [ ] #8 TimescaleDB schema 策略（hypertable/连续聚合/压缩保留）与部署拓扑定稿
-- [ ] #9 管理 WebUI 信息架构与权限模型定稿；输出任务拆分与排期
+- [x] #1 架构总纲定稿：三层结构/概念（DataPanel=逻辑数据集、Raw→Canonical→Read Model、Security Master、Cache 非权威）/四时间模型/Schema First（doc-10，已冻结）
+- [x] #2 数据字典规范定稿：机读 meta-schema、CI 校验、语义版本、代码化派生算法登记、变更流程（doc-11，已冻结）
+- [x] #3 REST 契约与 PIT（as-of）语义定稿：version_mode 三模式、publish strict/allow、结构化 filters、代次与 ETag、Cost Header（doc-12，已冻结）
+- [x] #4 TimescaleDB schema 策略定稿：域 schema、partition_strategy、is_latest 读侧派生、无 FK、压缩与 PIT 一致性门禁、投影表代次（doc-13，已冻结）
+- [x] #5 部署拓扑与凭证注入定稿：单机 compose、凭证三面（内部写入/只读角色/API Key）不落镜像（doc-2 §6.8、doc-10 §6.4、doc-12 §6）
+- [x] #6 WebUI IA 设计完成（doc-14，低优先级暂不冻结；认证授权/通知渠道移至 doc-15/doc-16 暂不制作）；任务拆分与里程碑就绪（m-0，TASK-3.1~3.14）
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -69,4 +66,26 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 数据字典规范第 1 稿（2026-09-13，doc-11）：YAML + Pydantic 元 schema；dataset/field 两级结构（含 SLA/coverage/quality/lineage/derived/source_mappings）；安全公式子集；CI 强制校验（provider 无关/语义版本/一致性）；生成物映射与变更流程；待评审：格式（YAML vs TOML）、文件粒度、公式 DSL 边界、派生登记范围。TASK-3.14 Security Master 已建。
 
 数据字典规范第 2 稿（2026-09-13，采纳 8 项评审）：semantic_version 整数；decimal precision/scale；business_key/physical_key 拆分；quality 跨字段 expression 规则；mappings 移至 dataset 级（Schema/Adapter 分离）；coverage 可计算（universe_source + expected_dates）；lineage 强制；公式不入字典（derived 仅 inputs/output/owner，公式归 TASK-3.12 引擎）。
+
+REST 契约第 1 稿（2026-09-13，doc-12）：只读薄封装；dataset-generic 路由 + SDK↔REST 映射；as_of/as_of_policy(knowledge|publish)/include_history/include_meta；复权 factor_ref 与 algorithm_id 回溯；游标分页/Arrow/ETag；RFC9457 错误模型；API Key scopes+审计+限流+PIT 安全缓存；待决策：路由风格、是否开放 POST query、include_meta 默认、publish 回退策略。
+
+REST 契约第 2 稿（2026-09-13，采纳评审）：删除 /latest（统一 rows + version_mode latest/as_of/history，as_of 必填不隐式 now）；publish fallback 显式 strict(默认 422)/allow；filters 结构化 AST；cursor=order_by+业务键+物理键；ETag 含 read_model_version+data_generation；派生 algorithm_id 始终返回；X-Query-Cost/Cache 头；研究快照端点预留。§10 决策记录 8 条。
+
+REST 契约冻结（2026-09-13，doc-12 第 3 稿）：version_mode 必选枚举（缺失 422 version_mode_required）；X-Data-Generation（Read Model 构建代次 YYYYMMDDTHHMMSSZ）纳入响应头/ETag/审计/缓存/排障。doc-12 已冻结。
+
+TimescaleDB schema 第 2 稿（2026-09-13，采纳评审）：partition_strategy 显式（market→event_time、versioned→knowledge_time 默认推导）；Canonical 不存 is_latest（读侧派生）；默认不建 FK；Read Model 三实现显式（view 默认/projection_table/首期不用 MV）。doc-11 冻结稿同步修订 storage 字段；doc-10 §4.2 注明 is_latest 读侧派生。
+
+压缩与 PIT 规范（2026-09-13，doc-13 §3.4）：压缩不得改变查询语义；仅压缩已封口 chunk；禁依赖 segmentby/orderby 语义；三模式压缩前后逐行一致 CI 门禁（样本/边界/失败阻断）；压缩参数登记字典 storage.compression（doc-11 同步修订）。
+
+WebUI IA 第 1 稿（2026-09-13，doc-14）：管理型控制台（REST 单一数据面，不直连 DB）；11 个一级导航（总览/数据域/同步任务/质量/新鲜度/血缘/派生算法/Security Master/快照导出/系统治理/个人）；角色 viewer/operator/admin + 操作矩阵 + 审计；待决策 5 项。
+
+WebUI IA 第 2 稿（2026-09-13）：按个人平台定位收敛——认证/授权/SSO 移至 doc-15（暂不制作）；WebUI 首期本机访问无账号；保留二次确认与最小事件日志。
+
+收口（2026-09-13）：设计文档集——doc-10 架构总纲（冻结）、doc-11 数据字典（冻结）、doc-12 REST 契约与 PIT（冻结）、doc-13 TimescaleDB 策略（冻结）、doc-14 WebUI IA（低优先级暂不冻结，接口稳定后再定稿）、doc-15 认证授权（暂不制作）、doc-16 通知渠道（暂不制作）。决策：个人平台定位，认证/授权/通知后置；事件日志不保留。任务拆分：m-0（TASK-3.1~3.14，Security Master 已纳入）。
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+TASK-3.1 设计收口：5 份定稿物完成（总纲/字典/REST/存储冻结；WebUI IA 低优先级暂缓），增强项（认证授权/通知）独立文档并标记暂不制作；任务拆分与里程碑 m-0（3.1~3.14）就绪。
+<!-- SECTION:FINAL_SUMMARY:END -->

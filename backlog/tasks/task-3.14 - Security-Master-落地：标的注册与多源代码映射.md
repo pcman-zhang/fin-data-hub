@@ -4,7 +4,9 @@ title: Security Master 落地：标的注册与多源代码映射
 status: To Do
 assignee: []
 created_date: '2026-09-13 12:16'
+updated_date: '2026-09-13 12:56'
 labels: []
+milestone: m-0
 dependencies: []
 parent_task_id: TASK-3
 ordinal: 50000

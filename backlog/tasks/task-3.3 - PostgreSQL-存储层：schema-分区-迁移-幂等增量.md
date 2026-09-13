@@ -4,7 +4,7 @@ title: TimescaleDB 存储层：schema / 分区 / 迁移 / 幂等增量
 status: To Do
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 09:25'
+updated_date: '2026-09-13 12:44'
 labels: []
 milestone: m-0
 dependencies:
@@ -38,4 +38,6 @@ ordinal: 22000
 修正（2026-09-13）：写入端不限于 scheduler——派生计算/文件导入/质量结果也是内部写入端；按 schema 最小授权（ingestion→raw/staging+主数据、derived→derived、import→raw、quality→quality）；派生管线见 TASK-3.12。
 
 时序存储（2026-09-13）：hypertable 按 (panel,key,event_time) 分区；knowledge_time 版本维度；按频率连续聚合；time_bucket_gapfill；压缩/保留按频率分级（doc-2 §6.14）。
+
+存储策略输入（2026-09-13，doc-13）：域 schema、hypertable 分区策略（按 pit_class 推导）、物理键唯一索引、不建 FK、is_latest 读侧派生、投影表代次 rename/swap、压缩参数登记字典。
 <!-- SECTION:NOTES:END -->

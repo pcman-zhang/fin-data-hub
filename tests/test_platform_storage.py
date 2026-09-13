@@ -38,10 +38,10 @@ def engine():
 def test_metadata_from_dictionary() -> None:
     metadata, specs = build_metadata()
     assert "cn_equity.daily_bar" in metadata.tables
-    assert "ref.security_master" in metadata.tables
+    assert "ref.entity" in metadata.tables
     table = metadata.tables["cn_equity.daily_bar"]
     assert [column.name for column in table.primary_key] == [
-        "security_id",
+        "entity_id",
         "trade_date",
         "knowledge_time",
         "version",
@@ -56,10 +56,12 @@ def test_metadata_from_dictionary() -> None:
 
 def test_ref_indexes_preserved_after_merge() -> None:
     metadata, _ = build_metadata()
-    master_indexes = {index.name for index in metadata.tables["ref.security_master"].indexes}
-    alias_indexes = {index.name for index in metadata.tables["ref.security_alias"].indexes}
-    assert "ux_security_master_canonical" in master_indexes
-    assert "ix_security_alias_source_code" in alias_indexes
+    entity_indexes = {index.name for index in metadata.tables["ref.entity"].indexes}
+    code_indexes = {
+        index.name for index in metadata.tables["ref.entity_code_history"].indexes
+    }
+    assert "ix_entity_code" in entity_indexes
+    assert "ix_entity_code_history_code" in code_indexes
 
 
 def test_schema_sql_for_postgres() -> None:
@@ -77,7 +79,7 @@ def test_timescale_statements_by_partition_strategy() -> None:
     joined = "\n".join(statements)
     assert "create_hypertable('cn_equity.daily_bar', 'trade_date'" in joined
     assert "INTERVAL '1 month'" in joined
-    assert "compress_segmentby = 'security_id'" in joined
+    assert "compress_segmentby = 'entity_id'" in joined
     assert "add_compression_policy('cn_equity.daily_bar', INTERVAL '7 days'" in joined
     # versioned 按 knowledge_time 分区
     assert "create_hypertable('cn_equity.financials_balance_sheet', 'knowledge_time'" in joined
@@ -87,7 +89,7 @@ def test_timescale_statements_by_partition_strategy() -> None:
 
 def _daily_bar_row(**overrides):
     row = {
-        "security_id": 10001,
+        "entity_id": 10001,
         "trade_date": date(2026, 1, 5),
         "knowledge_time": datetime(2026, 1, 5, 18, 0),
         "ingest_time": datetime(2026, 1, 5, 18, 1),
@@ -125,15 +127,15 @@ def test_database_document_generated() -> None:
         "cn_equity.financials_balance_sheet",
         "cn_equity.index_member",
         "cn_fund.nav",
-        "ref.security_master",
-        "ref.security_alias",
+        "ref.entity",
+        "ref.entity_code_history",
     ):
         assert f"`{key}`" in document
     assert "## 1. 表清单与作用" in document
     assert "## 2. 字段与类型" in document
     assert "## 3. 表依赖关系" in document
     assert "NUMERIC(24, 4)" in document
-    assert "ref.security_master（security_id 逻辑引用）" in document
+    assert "ref.entity（entity_id 逻辑引用）" in document
 
 
 def test_as_of_and_latest_queries(engine) -> None:
@@ -152,18 +154,18 @@ def test_as_of_and_latest_queries(engine) -> None:
             as_of_query(
                 table,
                 as_of=datetime(2026, 1, 15),
-                key_columns=["security_id", "trade_date"],
+                key_columns=["entity_id", "trade_date"],
             )
         ).mappings().all()
         late = connection.execute(
             as_of_query(
                 table,
                 as_of=datetime(2026, 3, 1),
-                key_columns=["security_id", "trade_date"],
+                key_columns=["entity_id", "trade_date"],
             )
         ).mappings().all()
         latest = connection.execute(
-            latest_query(table, key_columns=["security_id", "trade_date"])
+            latest_query(table, key_columns=["entity_id", "trade_date"])
         ).mappings().all()
     assert len(early) == 1 and float(early[0]["close"]) == 10.0
     assert len(late) == 1 and float(late[0]["close"]) == 12.0

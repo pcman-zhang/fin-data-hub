@@ -3,8 +3,8 @@ semantic_version: 1
 domain: cn_equity
 description: 指数成分与权重（月度快照；快照型 PIT，as-of 取最近一期）
 pit_class: snapshot
-business_key: [index_security_id, trade_date, con_security_id]
-physical_key: [index_security_id, trade_date, con_security_id, knowledge_time, version]
+business_key: [index_entity_id, trade_date, con_entity_id]
+physical_key: [index_entity_id, trade_date, con_entity_id, knowledge_time, version]
 grain: 指数 × 快照日 × 成分
 update_sla:
   frequency: monthly
@@ -16,7 +16,7 @@ sources:
     endpoint: index_weight
 coverage:
   universe: 沪深主要指数
-  universe_source: ref.security_master
+  universe_source: ref.entity
   history_start: "2005-04-08"
   expected_dates:
     calendar: ref.index_weight_schedule
@@ -30,17 +30,20 @@ storage:
   retention: all
   compression:
     after: 30 days
-    segment_by: index_security_id
+    segment_by: index_entity_id
     order_by: trade_date
 quality:
   - rule: unique
-    keys: [index_security_id, trade_date, con_security_id]
+    keys: [index_entity_id, trade_date, con_entity_id]
     severity: error
   - rule: range
     field: weight
     min: 0
     max: 100
     severity: error
+  - rule: reconcile
+    against: ref.entity
+    severity: warn
 lineage:
   upstream: []
   transform: raw
@@ -48,11 +51,11 @@ mappings:
   - provider: tushare
     endpoint: index_weight
     fields:
-      index_security_id: index_code
-      con_security_id: con_code
+      index_entity_id: index_code
+      con_entity_id: con_code
       weight: weight
 fields:
-  - name: index_security_id
+  - name: index_entity_id
     type: int64
     nullable: false
     description: 指数标的 ID
@@ -62,7 +65,7 @@ fields:
     nullable: false
     description: 快照日（月度）
     pit_role: event_time
-  - name: con_security_id
+  - name: con_entity_id
     type: int64
     nullable: false
     description: 成分标的 ID

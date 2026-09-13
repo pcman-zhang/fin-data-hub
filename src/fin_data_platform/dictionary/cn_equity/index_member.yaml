@@ -3,8 +3,8 @@ semantic_version: 1
 domain: cn_equity
 description: 申万行业成分（三级；区间型 PIT，含已剔除记录）
 pit_class: scd2
-business_key: [security_id, l3_code, in_date]
-physical_key: [security_id, l3_code, in_date]
+business_key: [entity_id, l3_code, in_date]
+physical_key: [entity_id, l3_code, in_date]
 grain: 标的 × 三级行业 × 生效区间
 update_sla:
   frequency: weekly
@@ -16,7 +16,7 @@ sources:
     endpoint: index_member_all
 coverage:
   universe: A 股（含退市）
-  universe_source: ref.security_master
+  universe_source: ref.entity
   history_start: "1993-10-08"
   expected_dates:
     calendar: ref.trade_calendar
@@ -30,11 +30,14 @@ storage:
   retention: all
 quality:
   - rule: unique
-    keys: [security_id, l3_code, in_date]
+    keys: [entity_id, l3_code, in_date]
     severity: error
   - rule: expression
     expr: "out_date >= in_date"
     severity: error
+  - rule: reconcile
+    against: ref.entity
+    severity: warn
 lineage:
   upstream: []
   transform: raw
@@ -42,14 +45,14 @@ mappings:
   - provider: tushare
     endpoint: index_member_all
     fields:
-      security_id: ts_code
+      entity_id: ts_code
       l1_code: l1_code
       l2_code: l2_code
       l3_code: l3_code
       in_date: in_date
       out_date: out_date
 fields:
-  - name: security_id
+  - name: entity_id
     type: int64
     nullable: false
     description: 标的 ID

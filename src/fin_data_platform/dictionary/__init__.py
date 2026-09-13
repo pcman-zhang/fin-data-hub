@@ -110,6 +110,67 @@ def export_schema() -> dict[str, Any]:
     return DatasetSpec.model_json_schema()
 
 
+#: dataset → 获取方式（对外接口；序列/宏观接入时补充）
+_ACCESS: dict[str, str] = {
+    "cn_equity.daily_bar": "get_bars(adjust=None/qfq/hfq)",
+    "cn_equity.adj_factor": "get_adjust_factors",
+    "cn_equity.index_weight": "get_index_weights",
+    "cn_equity.index_member": 'get_reference("industry_member")',
+    "cn_equity.financials.balance_sheet": 'get_financials(kind="balance_sheet")',
+    "cn_equity.market_events.namechange": 'get_market_events(kind="namechange")',
+    "cn_fund.nav": "get_fund_nav",
+    "ref.entity": "get_security_info / 内部",
+    "ref.entity_code_history": "内部（Hub mapper）",
+}
+
+
+def catalog(root: Path | None = None) -> list[dict[str, str]]:
+    """数据目录：我们有哪些数据、以什么 code/方式获取（doc-18 §5）。"""
+    specs = load_all(root or DEFAULT_ROOT)
+    rows: list[dict[str, str]] = []
+    for dataset, spec in sorted(specs.items()):
+        has_entity = any(
+            field.name == "entity_id" or field.name.endswith("_entity_id")
+            for field in spec.fields
+        )
+        rows.append(
+            {
+                "dataset": dataset,
+                "domain": str(spec.domain),
+                "description": spec.description,
+                "entity": "entity" if has_entity else "none",
+                "pit_class": spec.pit_class,
+                "sources": ", ".join(
+                    sorted({str(source.provider) for source in spec.sources})
+                )
+                or "—",
+                "access": _ACCESS.get(dataset, "—"),
+            }
+        )
+    return rows
+
+
+def catalog_markdown(root: Path | None = None) -> str:
+    """数据目录（Markdown，自动生成）。"""
+    lines = [
+        "# 数据目录（自动生成）",
+        "",
+        "> 回答两个基础问题：**我们有哪些数据**、**以什么 code / 方式获取**（doc-18 §5）；",
+        "> 随数据字典更新重新生成，请勿手改。",
+        "",
+        "| dataset | 域 | 说明 | 实体 | PIT 类别 | 来源 | 获取方式 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for row in catalog(root):
+        lines.append(
+            f"| `{row['dataset']}` | {row['domain']} | {row['description']} | "
+            f"{row['entity']} | {row['pit_class']} | {row['sources']} | "
+            f"`{row['access']}` |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def schema_path(root: Path | None = None) -> Path:
     base = root or DEFAULT_ROOT
     return base / "_schema" / "dictionary.schema.json"

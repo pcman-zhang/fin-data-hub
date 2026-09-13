@@ -3,8 +3,8 @@ semantic_version: 1
 domain: cn_equity
 description: 资产负债表（核心列；append-only 版本，按公告日知识时间）
 pit_class: versioned
-business_key: [security_id, end_date, report_type]
-physical_key: [security_id, end_date, report_type, knowledge_time, version]
+business_key: [entity_id, end_date, report_type]
+physical_key: [entity_id, end_date, report_type, knowledge_time, version]
 grain: 标的 × 报告期 × 报表类型
 update_sla:
   frequency: quarterly
@@ -16,7 +16,7 @@ sources:
     endpoint: balancesheet
 coverage:
   universe: A 股（含退市）
-  universe_source: ref.security_master
+  universe_source: ref.entity
   history_start: "1990-12-19"
   expected_dates:
     calendar: ref.report_periods
@@ -30,18 +30,21 @@ storage:
   retention: all
   compression:
     after: 30 days
-    segment_by: security_id
+    segment_by: entity_id
     order_by: end_date
 quality:
   - rule: unique
-    keys: [security_id, end_date, report_type, knowledge_time, version]
+    keys: [entity_id, end_date, report_type, knowledge_time, version]
     severity: error
   - rule: not_null
-    fields: [security_id, ann_date, end_date, report_type]
+    fields: [entity_id, ann_date, end_date, report_type]
     severity: error
   - rule: range
     field: total_assets
     min: 0
+    severity: warn
+  - rule: reconcile
+    against: ref.entity
     severity: warn
 lineage:
   upstream: []
@@ -63,7 +66,7 @@ mappings:
       goodwill: goodwill
       total_hldr_eqy_exc_min_int: total_hldr_eqy_exc_min_int
 fields:
-  - name: security_id
+  - name: entity_id
     type: int64
     nullable: false
     description: 标的 ID

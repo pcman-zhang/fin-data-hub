@@ -4,7 +4,7 @@ title: TimescaleDB 存储层：schema / 分区 / 迁移 / 幂等增量
 status: In Progress
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 13:50'
+updated_date: '2026-09-13 14:08'
 labels: []
 milestone: m-0
 dependencies:
@@ -52,4 +52,6 @@ DDL 输入约定（2026-09-13）：canonical_table = `<domain>.<其余路径以�
 消费项（2026-09-13）：Security Master 四表 schema 定义见 fin_data_platform.security_master.schema（ref schema，含唯一/查询索引）；DDL 生成与迁移执行由本任务接入；持久化仓储实现替换内存仓储（SecurityMasterRepository 协议）。
 
 第一期切片完成（2026-09-13）：storage/{config,schema,engine,writers,readers}——字典→SQLAlchemy metadata（类型映射/物理键主键/业务索引/ref 表合并）；hypertable/压缩 DDL 生成（按 partition_strategy）；ensure_schema（幂等，SQLite 跳过 schema 语句）；幂等 append（PG/SQLite ON CONFLICT DO NOTHING）；as-of/latest 窗口查询（按 business_key 分组——修复物理键含 version 导致的错误分组）。测试 5 项（SQLite 语义 + PG DDL 字符串）。全量 308 passed；ruff/mypy clean。待办切片：Alembic 迁移/回滚（AC#2）、Parquet/CSV 幂等导入（AC#4）、只读角色授权、PG/Timescale 集成验证与性能（AC#3）。
+
+数据库文档（2026-09-13）：新增 storage/report.py 自动生成 doc-17（表清单与作用/字段与类型/依赖关系）；随字典与 schema 变更重新生成。评审修复：ref 表索引保留、DDL 审计清单仅记录实际执行语句、event_time 缺失显式报错。
 <!-- SECTION:NOTES:END -->

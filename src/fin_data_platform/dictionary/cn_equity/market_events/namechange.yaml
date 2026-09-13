@@ -3,8 +3,8 @@ semantic_version: 1
 domain: cn_equity
 description: 名称变更历史（生效闭区间 + 公告日；用于 as-of 属性还原）
 pit_class: scd2
-business_key: [security_id, start_date]
-physical_key: [security_id, start_date, knowledge_time, version]
+business_key: [entity_id, start_date]
+physical_key: [entity_id, start_date, knowledge_time, version]
 grain: 标的 × 名称生效区间
 update_sla:
   frequency: daily
@@ -16,7 +16,7 @@ sources:
     endpoint: namechange
 coverage:
   universe: A 股（含退市）
-  universe_source: ref.security_master
+  universe_source: ref.entity
   history_start: "1990-12-19"
   expected_dates:
     calendar: ref.trade_calendar
@@ -30,11 +30,14 @@ storage:
   retention: all
 quality:
   - rule: unique
-    keys: [security_id, start_date, knowledge_time, version]
+    keys: [entity_id, start_date, knowledge_time, version]
     severity: error
   - rule: expression
     expr: "end_date >= start_date"
     severity: error
+  - rule: reconcile
+    against: ref.entity
+    severity: warn
 lineage:
   upstream: []
   transform: raw
@@ -48,7 +51,7 @@ mappings:
       ann_date: ann_date
       change_reason: change_reason
 fields:
-  - name: security_id
+  - name: entity_id
     type: int64
     nullable: false
     description: 标的 ID

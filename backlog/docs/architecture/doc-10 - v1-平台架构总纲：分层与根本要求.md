@@ -3,7 +3,7 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-13 12:56'
+updated_date: '2026-09-13 14:54'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
@@ -72,17 +72,17 @@ updated_date: '2026-09-13 12:56'
    - 升版本 = 新旧并存过渡期 + 弃用公告；`_v1` 冻结后只增不改，移除字段须先弃用；
 4. Read Model 是**权威数据的投影**，非缓存：缓存只加速，不改变读取语义（§3.4）。
 
-### 3.3 Security Master（平台基石，与 PIT 同级）
+### 3.3 引用注册表（Reference Registry；冻结稿修订 2026-09-13）
 
-**职责**：全域标的注册与标识治理——股票 / ETF / LOF / 场外基金 / 指数 / 期货 / 期权 / 债券。
+**定位**：注册表回答"数据说的是谁"——为可引用实体提供**稳定身份 + PIT 属性/生命周期**；不做源映射（归 Hub/字典）、不做数据目录（归字典）。
 
-- **标识**：平台内部稳定 `security_id`（主键）；业务键为 canonical code（WindCode）；多源代码通过别名表映射：
-  `security_alias(security_id, source, source_code, valid_from, valid_to)`——同一标的的 Tushare/AkShare/Wind/Fuyao 代码统一挂靠；
-- **生命周期**：`list_date / delist_date / status`（含退市永久保留）→ as-of 宇宙重建；
-- **属性版本（SCD2）**：名称（namechange）、ST 状态、市场板块、类型变更按生效区间留痕；
-- **逻辑表**：`security_master` / `security_alias` / `security_status_history` / `security_attribute_history`；
-- **与接入层关系**：FinDataHub 提供 canonical 映射与基础信息（含 `delist_list`），平台 Security Master 持久化全量并维护多源别名；
-- **强制约束**：任何数据集必须能通过 `security_id` 挂到 Security Master（行情/财务/成分/派生/事件皆然）。
+- **覆盖**：`instrument`（股票/ETF/LOF/基金/指数/期货/期权/债券/外汇对）、`series`（宏观/利率/EDB/另类时序，按需逐项接入）、`basket`（自编指数/组合/价差）；无实体数据不建实体。
+- **表结构（2 张，单表 + 类型标签 + JSONB 长尾）**：
+  - `ref.entity`：`entity_id`（稳定代理键）、`entity_type`、`code`（canonical WindCode）、`name`、`status`、`sec_type/currency/exchange/frequency/unit`、`list_date/delist_date`、`algorithm_id`、`valid_from/valid_to`（SCD2 闭区间）、`knowledge_time`、`version`、`attrs(JSONB)`；物理键 `(entity_id, valid_from, knowledge_time, version)`。
+  - `ref.entity_code_history`：canonical 代码履历（代码变更/复用 → 旧码仍可解析）；**替代原多源别名表**。
+- **不做**：每源别名表（证券源代码由 FinDataHub CodeMapper 机械归一；序列 vendor 码由字典 mappings 维护）。
+- **关键流程**：注册/刷新（Hub 基础信息 + delist_list + namechange）→ `resolve(code)`（含旧码）→ `universe(as_of)`（`list_date <= as_of < delist_date`）→ 属性 as-of 还原（SCD2 行）。
+- **待实施**：`security_id → entity_id` 改名、4 表 → 2 表、字典条目与实现同步（本轮执行）。
 
 ### 3.4 Cache 非权威原则（Cache Never Owns Data）
 

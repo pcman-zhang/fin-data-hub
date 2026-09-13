@@ -43,9 +43,9 @@ def _base(dataset: str = "cn_equity.demo", **overrides: object) -> dict:
         "domain": dataset.split(".")[0],
         "description": "demo",
         "pit_class": "market",
-        "business_key": ["security_id", "trade_date"],
+        "business_key": ["entity_id", "trade_date"],
         "physical_key": [
-            "security_id",
+            "entity_id",
             "trade_date",
             "knowledge_time",
             "version",
@@ -60,7 +60,7 @@ def _base(dataset: str = "cn_equity.demo", **overrides: object) -> dict:
         "sources": [{"provider": "tushare", "endpoint": "daily"}],
         "coverage": {
             "universe": "demo",
-            "universe_source": "ref.security_master",
+            "universe_source": "ref.entity",
             "history_start": "2020-01-01",
             "expected_dates": {"calendar": "ref.trade_calendar", "frequency": "daily"},
         },
@@ -73,14 +73,14 @@ def _base(dataset: str = "cn_equity.demo", **overrides: object) -> dict:
             "retention": "all",
             "compression": {
                 "after": "7 days",
-                "segment_by": "security_id",
+                "segment_by": "entity_id",
                 "order_by": "trade_date",
             },
         },
         "quality": [
             {
                 "rule": "unique",
-                "keys": ["security_id", "trade_date", "knowledge_time", "version"],
+                "keys": ["entity_id", "trade_date", "knowledge_time", "version"],
                 "severity": "error",
             }
         ],
@@ -90,7 +90,7 @@ def _base(dataset: str = "cn_equity.demo", **overrides: object) -> dict:
         ],
         "fields": [
             {
-                "name": "security_id",
+                "name": "entity_id",
                 "type": "int64",
                 "nullable": False,
                 "description": "d",
@@ -193,7 +193,7 @@ def test_expression_and_mapping_are_checked(tmp_path: Path) -> None:
             "pit_role": "none",
         }), "必须提供 precision/scale"),
         (
-            lambda d: d.update(physical_key=["security_id", "trade_date"]),
+            lambda d: d.update(physical_key=["entity_id", "trade_date"]),
             "physical_key 缺少",
         ),
         (
@@ -329,6 +329,19 @@ def test_errors_are_accumulated_across_files(tmp_path: Path) -> None:
     assert any("加载失败" in error for error in errors)
 
 
+def test_catalog_covers_datasets_and_access() -> None:
+    from fin_data_platform.dictionary import catalog, catalog_markdown
+
+    rows = {row["dataset"]: row for row in catalog()}
+    assert rows["cn_equity.daily_bar"]["access"].startswith("get_bars")
+    assert rows["cn_equity.daily_bar"]["entity"] == "entity"
+    assert rows["ref.entity"]["entity"] == "entity"
+    assert rows["ref.entity_code_history"]["access"] == "内部（Hub mapper）"
+    document = catalog_markdown()
+    assert "`cn_fund.nav`" in document
+    assert "get_financials" in document
+
+
 def test_real_entry_loadable() -> None:
     spec = load_file(DEFAULT_ROOT / "cn_equity" / "daily_bar.yaml")
     assert spec.storage.partition_strategy == "event_time"
@@ -367,8 +380,8 @@ def test_mappings_align_with_hub_adapter_specs() -> None:
             if mapping.endpoint in _REFERENCE_ENDPOINTS:
                 continue
             for canonical in mapping.fields:
-                if canonical == "security_id" or canonical.endswith("_security_id"):
-                    continue  # 平台内部 ID（由 Security Master 映射，非源字段）
+                if canonical == "entity_id" or canonical.endswith("_entity_id"):
+                    continue  # 平台内部 ID（由 引用注册表 映射，非源字段）
                 assert canonical in known, (
                     f"{dataset}: mapping 字段 {canonical!r} 未在"
                     f" {mapping.provider} 适配器 spec 中定义"

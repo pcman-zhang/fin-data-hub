@@ -3,8 +3,8 @@ semantic_version: 1
 domain: cn_equity
 description: A 股日线行情（不复权原始价；复权价按 raw + factor、as-of 计算）
 pit_class: market
-business_key: [security_id, trade_date]
-physical_key: [security_id, trade_date, knowledge_time, version]
+business_key: [entity_id, trade_date]
+physical_key: [entity_id, trade_date, knowledge_time, version]
 grain: 标的 × 交易日
 update_sla:
   frequency: daily
@@ -18,7 +18,7 @@ sources:
     endpoint: query_history_k_data_plus
 coverage:
   universe: A 股（含退市）
-  universe_source: ref.security_master
+  universe_source: ref.entity
   history_start: "1990-12-19"
   expected_dates:
     calendar: ref.trade_calendar
@@ -32,14 +32,14 @@ storage:
   retention: all
   compression:
     after: 7 days
-    segment_by: security_id
+    segment_by: entity_id
     order_by: trade_date
 quality:
   - rule: unique
-    keys: [security_id, trade_date, knowledge_time, version]
+    keys: [entity_id, trade_date, knowledge_time, version]
     severity: error
   - rule: not_null
-    fields: [security_id, trade_date, knowledge_time, version]
+    fields: [entity_id, trade_date, knowledge_time, version]
     severity: error
   - rule: range
     field: volume
@@ -50,6 +50,9 @@ quality:
     severity: error
   - rule: reconcile
     against: raw.tushare_daily
+    severity: warn
+  - rule: reconcile
+    against: ref.entity
     severity: warn
 lineage:
   upstream: []
@@ -83,7 +86,7 @@ mappings:
       volume: volume
       amount: amount
 fields:
-  - name: security_id
+  - name: entity_id
     type: int64
     nullable: false
     description: 平台标的 ID（Security Master 主键）

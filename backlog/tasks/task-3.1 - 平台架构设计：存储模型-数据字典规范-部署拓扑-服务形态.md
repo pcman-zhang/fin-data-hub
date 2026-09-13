@@ -4,7 +4,7 @@ title: 平台架构设计：FinDataPlatform / DataPanel(PIT) / 存储 / 部署 /
 status: In Progress
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-13 12:16'
+updated_date: '2026-09-13 12:19'
 labels: []
 milestone: m-0
 dependencies: []
@@ -67,4 +67,6 @@ PIT 定稿（2026-09-13）：行情/快照天然 PIT；公司行为/复权因子
 第 3 稿（2026-09-13，采纳评审）：Read Model 语义版本化（字段兼容≠语义兼容，加字段不升版、口径变化升版）；宏观分域 macro_cn/macro_us/macro_global（防垃圾桶）；新增 §6.2 Source Independence Principle（canonical/read model 禁供应商特有字段，provider 维度 + Raw 层例外 + CI 校验）。doc-2 §6.11 同步宏观分域。
 
 数据字典规范第 1 稿（2026-09-13，doc-11）：YAML + Pydantic 元 schema；dataset/field 两级结构（含 SLA/coverage/quality/lineage/derived/source_mappings）；安全公式子集；CI 强制校验（provider 无关/语义版本/一致性）；生成物映射与变更流程；待评审：格式（YAML vs TOML）、文件粒度、公式 DSL 边界、派生登记范围。TASK-3.14 Security Master 已建。
+
+数据字典规范第 2 稿（2026-09-13，采纳 8 项评审）：semantic_version 整数；decimal precision/scale；business_key/physical_key 拆分；quality 跨字段 expression 规则；mappings 移至 dataset 级（Schema/Adapter 分离）；coverage 可计算（universe_source + expected_dates）；lineage 强制；公式不入字典（derived 仅 inputs/output/owner，公式归 TASK-3.12 引擎）。
 <!-- SECTION:NOTES:END -->

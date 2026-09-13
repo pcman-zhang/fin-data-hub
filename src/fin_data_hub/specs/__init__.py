@@ -4,24 +4,40 @@
 
 - ``[params]``：请求参数映射（复权枚举、日期格式等）；
 - ``[response.<capability>]``：原始响应字段 → canonical 字段的映射
-  （``type`` ∈ code/date/date_ms/float/int/str/bool，``factor`` 支持单位换算）。
+  （``type`` ∈ code/date/date_ms/float/int/str/bool，``factor`` 支持单位换算，
+  ``optional=true`` 表示源字段缺失时置空而不报错）。
 
-v0 阶段：spec 作为**契约与校验**（覆盖度、结构、归一化语义测试）；
-阶段 B 由 adapter 切换为调用 :func:`normalize`。
+阶段 A：spec 作为**契约与校验**（覆盖度、结构、归一化语义测试）；
+阶段 B：adapter 调用 :func:`normalize` 完成字段映射（code 字段可用
+``mapper`` 还原 canonical，或用 ``code=`` 覆盖单标响应）。
+例外：iFinD（markdown 文本 parser）、Wind（单位因子随响应 ``unit`` 元数据动态变化）。
 """
 
 from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
+from functools import cache
 from importlib.resources import files
+from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
 
 from fin_data_hub.enums import Source
 from fin_data_hub.errors import ResponseParseError
 
+if TYPE_CHECKING:
+    from fin_data_hub.codes import SecCode
+
 _FIELD_TYPES = frozenset({"code", "date", "date_ms", "float", "int", "str", "bool"})
+
+
+class CodeMapperLike(Protocol):
+    """``normalize`` 需要的代码还原协议（``mapping.CodeMapper`` 子集）。"""
+
+    def from_source(
+        self, raw: str, *, venue: str | None = None, endpoint: str | None = None
+    ) -> SecCode: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +46,7 @@ class FieldSpec:
     type: str = "float"
     factor: float = 1.0
     format: str | None = None
+    optional: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +62,7 @@ class SourceSpec:
     responses: dict[str, ResponseSpec]
 
 
+@cache
 def load_spec(source: Source | str) -> SourceSpec:
     """加载某数据源的 spec（``fin_data_hub/specs/<source>.toml``）。"""
     resolved = Source(source)
@@ -58,6 +76,7 @@ def load_spec(source: Source | str) -> SourceSpec:
                 type=spec.get("type", "float"),
                 factor=float(spec.get("factor", 1.0)),
                 format=spec.get("format"),
+                optional=bool(spec.get("optional", False)),
             )
             for canonical, spec in (block.get("fields") or {}).items()
         }
@@ -111,8 +130,15 @@ def normalize(
     spec: ResponseSpec,
     *,
     source: Source | str,
+    mapper: CodeMapperLike | None = None,
+    code: str | None = None,
 ) -> pd.DataFrame:
-    """按 spec 将原始响应归一化为 canonical DataFrame。"""
+    """按 spec 将原始响应归一化为 canonical DataFrame。
+
+    - ``code``：单标响应（无代码列）时用于填充 canonical 代码；
+    - ``mapper``：响应含源端代码时用其还原 canonical（``from_source``）；
+    - 可选字段（``optional=true``）缺失时置空，必需字段缺失报错。
+    """
     source_name = str(source)
     missing = [column for column in spec.required if column not in raw.columns]
     if missing:
@@ -122,6 +148,9 @@ def normalize(
     data: dict[str, pd.Series] = {}
     for canonical, field in spec.fields.items():
         if field.source not in raw.columns:
+            if field.optional:
+                data[canonical] = pd.Series(pd.NA, index=raw.index)
+                continue
             raise ResponseParseError(
                 f"[{source_name}] 缺少映射源字段 {field.source!r}（canonical={canonical}）"
             )
@@ -136,16 +165,31 @@ def normalize(
                 .dt.normalize()
                 .dt.tz_localize(None)
             )
+        elif field.type == "code":
+            if code is not None:
+                parsed = pd.Series([code] * len(raw), index=raw.index, dtype=object)
+            elif mapper is not None:
+                parsed = series.map(
+                    lambda value: mapper.from_source(str(value)).canonical
+                )
+            else:
+                parsed = series.astype(str)
         elif field.type == "float":
             parsed = pd.to_numeric(series, errors="coerce") * field.factor
         elif field.type == "int":
             parsed = pd.to_numeric(series, errors="coerce").astype("Int64")
         elif field.type == "bool":
-            parsed = series.astype(bool)
-        else:  # code / str
+            numeric = pd.to_numeric(series, errors="coerce")
+            text = series.astype(str).str.strip().str.lower()
+            parsed = numeric.fillna(0).astype(bool) | text.isin(
+                {"true", "t", "yes", "y"}
+            )
+        else:  # str
             parsed = series.astype(str)
         data[canonical] = parsed
     frame = pd.DataFrame(data)
+    if code is not None and "code" not in frame.columns:
+        frame.insert(0, "code", code)
     for canonical, field in spec.fields.items():
         if field.type in ("date", "date_ms"):
             frame[canonical] = frame[canonical].astype("datetime64[ns]")

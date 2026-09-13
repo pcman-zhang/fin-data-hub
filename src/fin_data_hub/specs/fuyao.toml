@@ -51,8 +51,8 @@ required = ["ex_date_ms", "dividend_per_share", "per_share_bonus"]
 
 [response.adjustment_events.fields]
 ex_date = { source = "ex_date_ms", type = "date_ms" }
-dividend_per_share = { source = "dividend_per_share", type = "float" }
-per_share_bonus = { source = "per_share_bonus", type = "float" }
+dividend_per_share = { source = "dividend_per_share", type = "float", optional = true }
+per_share_bonus = { source = "per_share_bonus", type = "float", optional = true }
 
 [response.trade_calendar]
 required = ["date"]

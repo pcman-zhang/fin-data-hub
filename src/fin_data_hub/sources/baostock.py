@@ -32,6 +32,7 @@ from fin_data_hub.errors import SourceError, UnsupportedCapability
 from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import compute_backoff, default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
+from fin_data_hub.specs import load_spec, normalize
 
 _BAOSTOCK_LOCK = threading.RLock()
 _LOGIN_COUNT = 0
@@ -102,6 +103,7 @@ class BaoStockAdapter(BaseAdapter):
         self._bs = bs_module if bs_module is not None else _default_module()
         self._mapper = get_mapper(self.source)
         self._rate_limits = default_rate_limiter_set(self.source)
+        self._spec = load_spec(self.source)
         self._sleep_fn = sleep_fn
         self._closed = False
         self._login_acquired = False
@@ -171,20 +173,13 @@ class BaoStockAdapter(BaseAdapter):
         if not rows:
             return _empty_bars()
         raw = pd.DataFrame(rows, columns=columns)
-        for column in ("open", "high", "low", "close", "volume", "amount"):
-            raw[column] = pd.to_numeric(raw[column], errors="coerce")
-        return pd.DataFrame(
-            {
-                "code": code.canonical,
-                "date": pd.to_datetime(raw["date"]).astype("datetime64[ns]"),
-                "open": raw["open"],
-                "high": raw["high"],
-                "low": raw["low"],
-                "close": raw["close"],
-                "volume": raw["volume"],
-                "amount": raw["amount"],
-            }
-        ).sort_values("date").reset_index(drop=True)
+        frame = normalize(
+            raw,
+            self._spec.responses["bars"],
+            source=self.source,
+            code=code.canonical,
+        )
+        return frame.sort_values("date").reset_index(drop=True)
 
     # -------------------------------------------------------------- 参考数据
     def fetch_reference(self, kind: str) -> pd.DataFrame:
@@ -252,8 +247,27 @@ class BaoStockAdapter(BaseAdapter):
                 "query_adjust_factor",
                 latency_ms=(time.monotonic() - started) * 1000,
             )
+        if rows:
+            parsed = (
+                normalize(
+                    pd.DataFrame(rows, columns=columns),
+                    self._spec.responses["adjust_factors"],
+                    source=self.source,
+                )
+                .sort_values("date")
+                .dropna(subset=["date", "adj_factor"])
+                .drop_duplicates(subset=["date"], keep="last")
+                .reset_index(drop=True)
+            )
+        else:
+            parsed = pd.DataFrame(
+                {
+                    "date": pd.Series([], dtype="datetime64[ns]"),
+                    "adj_factor": pd.Series([], dtype=float),
+                }
+            )
         return _factors_frame(
-            code, rows, columns, start=_iso_date(start), end=_iso_date(end)
+            code, parsed, start=_iso_date(start), end=_iso_date(end)
         )
 
     # ---------------------------------------------------------------- 日历
@@ -279,13 +293,8 @@ class BaoStockAdapter(BaseAdapter):
             )
         raw = pd.DataFrame(rows, columns=columns)
         return (
-            pd.DataFrame(
-                {
-                    "date": pd.to_datetime(raw["calendar_date"]).astype(
-                        "datetime64[ns]"
-                    ),
-                    "is_open": pd.to_numeric(raw["is_trading_day"]).astype(bool),
-                }
+            normalize(
+                raw, self._spec.responses["trade_calendar"], source=self.source
             )
             .sort_values("date")
             .reset_index(drop=True)
@@ -374,8 +383,7 @@ def _empty_stock_list() -> pd.DataFrame:
 
 def _factors_frame(
     code: SecCode,
-    rows: list[list[str]],
-    columns: list[str],
+    parsed: pd.DataFrame,
     *,
     start: str,
     end: str,
@@ -383,26 +391,9 @@ def _factors_frame(
     """事件步进因子 → 规范因子帧（基准行 + 窗口内事件行）。"""
     start_ts = pd.Timestamp(start)
     end_ts = pd.Timestamp(end)
-    empty = pd.DataFrame(
-        {
-            "date": pd.Series([], dtype="datetime64[ns]"),
-            "adj_factor": pd.Series([], dtype=float),
-        }
-    )
-    if rows:
-        raw = pd.DataFrame(rows, columns=columns)
-        raw["date"] = pd.to_datetime(raw["dividOperateDate"], errors="coerce")
-        raw["adj_factor"] = pd.to_numeric(raw["backAdjustFactor"], errors="coerce")
-        raw = (
-            raw.dropna(subset=["date", "adj_factor"])
-            .sort_values("date")
-            .drop_duplicates(subset=["date"], keep="last")
-        )
-    else:
-        raw = empty
-    before = raw[raw["date"] < start_ts]
+    before = parsed[parsed["date"] < start_ts]
     base = float(before.iloc[-1]["adj_factor"]) if not before.empty else 1.0
-    window = raw[(raw["date"] >= start_ts) & (raw["date"] <= end_ts)]
+    window = parsed[(parsed["date"] >= start_ts) & (parsed["date"] <= end_ts)]
     frames = []
     if window.empty or window["date"].iloc[0] != start_ts:
         frames.append(

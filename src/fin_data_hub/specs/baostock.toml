@@ -1,0 +1,28 @@
+[params.date]
+format = "%Y-%m-%d"
+
+[response.bars]
+required = ["date", "open", "high", "low", "close", "volume", "amount"]
+
+[response.bars.fields]
+date = { source = "date", type = "date" }
+open = { source = "open", type = "float" }
+high = { source = "high", type = "float" }
+low = { source = "low", type = "float" }
+close = { source = "close", type = "float" }
+volume = { source = "volume", type = "float" }
+amount = { source = "amount", type = "float" }
+
+[response.trade_calendar]
+required = ["calendar_date", "is_trading_day"]
+
+[response.trade_calendar.fields]
+date = { source = "calendar_date", type = "date" }
+is_open = { source = "is_trading_day", type = "bool" }
+
+[response.adjust_factors]
+required = ["dividOperateDate", "backAdjustFactor"]
+
+[response.adjust_factors.fields]
+date = { source = "dividOperateDate", type = "date" }
+adj_factor = { source = "backAdjustFactor", type = "float" }

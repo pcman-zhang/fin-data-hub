@@ -24,8 +24,8 @@ required = ["净值日期", "单位净值"]
 [response.fund_nav.fields]
 date = { source = "净值日期", type = "date" }
 unit_nav = { source = "单位净值", type = "float" }
-accum_nav = { source = "累计净值", type = "float" }
-daily_return = { source = "日增长率", type = "float" }
+accum_nav = { source = "累计净值", type = "float", optional = true }
+daily_return = { source = "日增长率", type = "float", optional = true }
 
 [response.trade_calendar]
 required = ["trade_date"]

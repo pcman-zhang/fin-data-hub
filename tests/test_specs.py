@@ -3,6 +3,14 @@ import pytest
 
 from fin_data_hub import Capability, Source
 from fin_data_hub.errors import ResponseParseError
+from fin_data_hub.schemas import (
+    ADJUST_FACTOR_COLUMNS,
+    ADJUSTMENT_EVENT_COLUMNS,
+    BARS_COLUMNS,
+    CALENDAR_COLUMNS,
+    NAV_COLUMNS,
+    SNAPSHOT_COLUMNS,
+)
 from fin_data_hub.specs import load_all_specs, load_spec, normalize, validate_specs
 
 COVERAGE: dict[Source, set[Capability]] = {
@@ -24,11 +32,36 @@ COVERAGE: dict[Source, set[Capability]] = {
         Capability.ADJUSTMENT_EVENTS,
         Capability.TRADE_CALENDAR,
     },
+    Source.BAOSTOCK: {
+        Capability.BARS,
+        Capability.TRADE_CALENDAR,
+        Capability.ADJUST_FACTORS,
+    },
+}
+
+#: endpoint → canonical schema 列（spec 目标列一致性校验）
+SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {
+    "bars": BARS_COLUMNS,
+    "snapshot": SNAPSHOT_COLUMNS,
+    "fund_nav": NAV_COLUMNS,
+    "trade_calendar": CALENDAR_COLUMNS,
+    "adjust_factors": ADJUST_FACTOR_COLUMNS,
+    "adjustment_events": ADJUSTMENT_EVENT_COLUMNS,
 }
 
 
 def test_specs_are_structurally_valid() -> None:
     assert validate_specs() == []
+
+
+def test_spec_targets_are_canonical_columns() -> None:
+    for source, spec in load_all_specs().items():
+        for endpoint, response in spec.responses.items():
+            expected = set(SCHEMA_COLUMNS[endpoint])
+            extra = set(response.fields) - expected
+            assert not extra, (
+                f"{source}.{endpoint} 映射列不在 canonical schema: {sorted(extra)}"
+            )
 
 
 def test_spec_coverage() -> None:
@@ -101,3 +134,93 @@ def test_normalize_missing_mapped_field_raises() -> None:
     raw = pd.DataFrame({"a": [1]})
     with pytest.raises(ResponseParseError, match="缺少映射源字段"):
         normalize(raw, spec, source=Source.FUYAO)
+
+
+def test_normalize_optional_field_and_code_override() -> None:
+    spec = load_spec(Source.AKSHARE).responses["fund_nav"]
+    raw = pd.DataFrame({"净值日期": ["2026-01-05"], "单位净值": [1.234]})
+    frame = normalize(raw, spec, source=Source.AKSHARE, code="000001.OF")
+    assert frame["code"].tolist() == ["000001.OF"]
+    assert frame["accum_nav"].isna().all()  # optional 缺失 → 置空
+    assert "daily_return" not in frame.columns or frame["daily_return"].isna().all()
+
+
+def test_normalize_akshare_bars_golden() -> None:
+    spec = load_spec(Source.AKSHARE).responses["bars"]
+    raw = pd.DataFrame(
+        {
+            "日期": ["2026-01-05", "2026-01-06"],
+            "开盘": [10.0, 10.5],
+            "收盘": [10.5, 10.8],
+            "最高": [10.6, 10.9],
+            "最低": [9.9, 10.4],
+            "成交量": [1000.0, 2000.0],
+            "成交额": [10500.0, 21600.0],
+        }
+    )
+    frame = normalize(raw, spec, source=Source.AKSHARE, code="600000.SH")
+    assert frame["code"].tolist() == ["600000.SH", "600000.SH"]
+    assert frame["date"].tolist() == [
+        pd.Timestamp("2026-01-05"),
+        pd.Timestamp("2026-01-06"),
+    ]
+    assert frame["volume"].tolist() == [100_000.0, 200_000.0]  # 手 → 股
+
+
+def test_normalize_fuyao_bars_golden() -> None:
+    spec = load_spec(Source.FUYAO).responses["bars"]
+    ms = 1767571200000  # 2026-01-05 00:00 Asia/Shanghai
+    raw = pd.DataFrame(
+        {
+            "date_ms": [ms],
+            "open_price": [10.0],
+            "high_price": [10.6],
+            "low_price": [9.9],
+            "close_price": [10.5],
+            "volume": [1_000_000.0],
+            "turnover": [10_500_000.0],
+        }
+    )
+    frame = normalize(raw, spec, source=Source.FUYAO, code="600000.SH")
+    assert frame["date"].tolist() == [pd.Timestamp("2026-01-05")]  # date_ms → 沪市日期
+    assert frame["close"].tolist() == [10.5]
+
+
+def test_normalize_baostock_bars_and_factors_golden() -> None:
+    spec = load_spec(Source.BAOSTOCK)
+    bars_raw = pd.DataFrame(
+        {
+            "date": ["2026-09-01"],
+            "open": ["1295.0"],
+            "high": ["1307.99"],
+            "low": ["1286.10"],
+            "close": ["1299.56"],
+            "volume": ["3266402"],
+            "amount": ["4242441000"],
+        }
+    )
+    bars = normalize(bars_raw, spec.responses["bars"], source=Source.BAOSTOCK, code="600000.SH")
+    assert bars["close"].tolist() == [1299.56]
+    assert str(bars["date"].dtype) == "datetime64[ns]"
+
+    factors_raw = pd.DataFrame(
+        {
+            "dividOperateDate": ["2024-07-18"],
+            "backAdjustFactor": ["12.388310"],
+            "foreAdjustFactor": ["0.967359"],
+        }
+    )
+    factors = normalize(
+        factors_raw, spec.responses["adjust_factors"], source=Source.BAOSTOCK
+    )
+    assert factors["adj_factor"].tolist() == [12.388310]
+    assert factors["date"].tolist() == [pd.Timestamp("2024-07-18")]
+
+
+def test_normalize_tushare_calendar_bool_golden() -> None:
+    spec = load_spec(Source.TUSHARE).responses["trade_calendar"]
+    raw = pd.DataFrame(
+        {"cal_date": ["20260105", "20260106"], "is_open": ["1", "0"]}
+    )
+    frame = normalize(raw, spec, source=Source.TUSHARE)
+    assert frame["is_open"].tolist() == [True, False]

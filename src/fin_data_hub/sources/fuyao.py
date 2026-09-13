@@ -27,8 +27,10 @@ from fin_data_hub.errors import (
     SourceError,
     UnsupportedCapability,
 )
+from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import default_rate_limiter_set, retry_call
 from fin_data_hub.sources.base import BaseAdapter
+from fin_data_hub.specs import load_spec, normalize
 
 _REFERENCE_ASSET_TYPES = {
     "stock_list": "a-share",
@@ -119,6 +121,8 @@ class FuyaoAdapter(BaseAdapter):
     ) -> None:
         self._config = config or FuyaoConfig()
         self._sleep_fn = sleep_fn
+        self._mapper = get_mapper(self.source)
+        self._spec = load_spec(self.source)
         if http_client is not None:
             self._client = http_client
             self._owns_client = False
@@ -185,18 +189,13 @@ class FuyaoAdapter(BaseAdapter):
         if not items:
             return _empty_bars()
         raw = pd.DataFrame(items)
-        return pd.DataFrame(
-            {
-                "code": code.canonical,
-                "date": _ms_to_date(raw["date_ms"]),
-                "open": pd.to_numeric(raw["open_price"]),
-                "high": pd.to_numeric(raw["high_price"]),
-                "low": pd.to_numeric(raw["low_price"]),
-                "close": pd.to_numeric(raw["close_price"]),
-                "volume": pd.to_numeric(raw["volume"]),
-                "amount": pd.to_numeric(raw["turnover"]),
-            }
-        ).sort_values("date").reset_index(drop=True)
+        frame = normalize(
+            raw,
+            self._spec.responses["bars"],
+            source=self.source,
+            code=code.canonical,
+        )
+        return frame.sort_values("date").reset_index(drop=True)
 
     # ---------------------------------------------------------------- 快照
     def fetch_snapshot(
@@ -219,19 +218,14 @@ class FuyaoAdapter(BaseAdapter):
         date_value: Any = (
             pd.NaT if timestamp is None else _ms_to_date(pd.Series([timestamp])).iloc[0]
         )
-        return pd.DataFrame(
-            {
-                "code": raw["thscode"],
-                "date": date_value,
-                "last": pd.to_numeric(raw["last_price"]),
-                "open": pd.to_numeric(raw["open_price"]),
-                "high": pd.to_numeric(raw["high_price"]),
-                "low": pd.to_numeric(raw["low_price"]),
-                "prev_close": pd.to_numeric(raw["prev_price"]),
-                "volume": pd.to_numeric(raw["volume"]),
-                "amount": pd.to_numeric(raw["turnover"]),
-            }
+        frame = normalize(
+            raw,
+            self._spec.responses["snapshot"],
+            source=self.source,
+            mapper=self._mapper,
         )
+        frame.insert(1, "date", date_value)
+        return frame
 
     # -------------------------------------------------------------- 参考数据
     def fetch_reference(self, kind: str) -> pd.DataFrame:
@@ -306,7 +300,7 @@ class FuyaoAdapter(BaseAdapter):
         """
         if not codes:
             raise ValueError("codes 不能为空")
-        rows: list[dict] = []
+        frames: list[pd.DataFrame] = []
         for code in codes:
             params: dict[str, Any] = {"thscode": code.canonical}
             if start:
@@ -316,22 +310,24 @@ class FuyaoAdapter(BaseAdapter):
             data = self._get(
                 "/api/a-share/corporate-actions/adjustment-factors", params
             )
-            for item in data.get("item") or []:
-                rows.append(
-                    {
-                        "code": code.canonical,
-                        "ex_date": item["ex_date_ms"],
-                        "dividend_per_share": item.get("dividend_per_share", 0.0),
-                        "per_share_bonus": item.get("per_share_bonus", 0.0),
-                    }
+            items = data.get("item") or []
+            if not items:
+                continue
+            frames.append(
+                normalize(
+                    pd.DataFrame(items),
+                    self._spec.responses["adjustment_events"],
+                    source=self.source,
+                    code=code.canonical,
                 )
-        if not rows:
+            )
+        if not frames:
             return _empty_adjustment_events()
-        frame = pd.DataFrame(rows)
-        frame["ex_date"] = _ms_to_date(frame["ex_date"])
-        frame["dividend_per_share"] = pd.to_numeric(frame["dividend_per_share"])
-        frame["per_share_bonus"] = pd.to_numeric(frame["per_share_bonus"])
-        return frame.sort_values(["code", "ex_date"]).reset_index(drop=True)
+        return (
+            pd.concat(frames, ignore_index=True)
+            .sort_values(["code", "ex_date"])
+            .reset_index(drop=True)
+        )
 
     # ---------------------------------------------------------------- 日历
     def fetch_trade_calendar(self, *, start: str, end: str) -> pd.DataFrame:

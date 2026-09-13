@@ -23,9 +23,8 @@ from fin_data_hub.errors import MissingCredentialError, SourceError, Unsupported
 from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
+from fin_data_hub.specs import load_spec, normalize
 
-_LOT_TO_SHARE = 100
-_THOUSAND_YUAN_TO_YUAN = 1000
 _FACTOR_ENDPOINTS: dict[SecType, str] = {
     SecType.STOCK: "adj_factor",
     SecType.ETF: "fund_adj",
@@ -67,6 +66,7 @@ class TushareAdapter(BaseAdapter):
     ) -> None:
         self._mapper = get_mapper(self.source)
         self._rate_limits = default_rate_limiter_set(self.source)
+        self._spec = load_spec(self.source)
         if api is not None:
             self._api = api
             return
@@ -103,26 +103,27 @@ class TushareAdapter(BaseAdapter):
         if raw.empty:
             return _empty_bars()
 
-        bars = pd.DataFrame(
-            {
-                "code": raw["ts_code"],
-                "date": raw["trade_date"],
-                "open": pd.to_numeric(raw["open"]),
-                "high": pd.to_numeric(raw["high"]),
-                "low": pd.to_numeric(raw["low"]),
-                "close": pd.to_numeric(raw["close"]),
-                "volume": pd.to_numeric(raw["vol"]) * _LOT_TO_SHARE,
-                "amount": pd.to_numeric(raw["amount"]) * _THOUSAND_YUAN_TO_YUAN,
-            }
+        bars = normalize(
+            raw,
+            self._spec.responses["bars"],
+            source=self.source,
+            mapper=self._mapper,
         )
-        bars["date"] = _from_ts_date(bars["date"])
 
         if adjust in ("qfq", "hfq"):
-            factors = self._query(
+            factors_raw = self._query(
                 "adj_factor",
                 ts_code=",".join(ts_codes),
                 start_date=_to_ts_date(start),
                 end_date=_to_ts_date(end),
+            )
+            if factors_raw.empty:
+                raise SourceError("Tushare adj_factor 缺失，无法计算复权价")
+            factors = normalize(
+                factors_raw,
+                self._spec.responses["adjust_factors"],
+                source=self.source,
+                mapper=self._mapper,
             )
             bars = self._apply_adjust(bars, factors, adjust)
 
@@ -131,14 +132,7 @@ class TushareAdapter(BaseAdapter):
     def _apply_adjust(
         self, bars: pd.DataFrame, factors: pd.DataFrame, adjust: str
     ) -> pd.DataFrame:
-        factor_frame = pd.DataFrame(
-            {
-                "code": factors["ts_code"],
-                "date": _from_ts_date(factors["trade_date"]),
-                "adj_factor": pd.to_numeric(factors["adj_factor"]),
-            }
-        )
-        merged = bars.merge(factor_frame, on=["code", "date"], how="left")
+        merged = bars.merge(factors, on=["code", "date"], how="left")
         if merged["adj_factor"].isna().any():
             raise SourceError("Tushare adj_factor 缺失，无法计算复权价")
         if adjust == "qfq":
@@ -175,17 +169,13 @@ class TushareAdapter(BaseAdapter):
                     "daily_return": [],
                 }
             )
-        nav = pd.DataFrame(
-            {
-                "code": raw["ts_code"],
-                "date": _from_ts_date(raw["nav_date"]),
-                "unit_nav": pd.to_numeric(raw["unit_nav"]),
-                "accum_nav": pd.to_numeric(raw["accum_nav"]),
-            }
+        nav = normalize(
+            raw,
+            self._spec.responses["fund_nav"],
+            source=self.source,
+            mapper=self._mapper,
         ).sort_values(["code", "date"])
-        nav["daily_return"] = (
-            nav.groupby("code")["unit_nav"].pct_change() * 100
-        )
+        nav["daily_return"] = nav.groupby("code")["unit_nav"].pct_change() * 100
         return nav.reset_index(drop=True)
 
     # -------------------------------------------------------------- 参考数据
@@ -265,12 +255,11 @@ class TushareAdapter(BaseAdapter):
             if raw.empty:
                 continue
             frames.append(
-                pd.DataFrame(
-                    {
-                        "code": raw["ts_code"],
-                        "date": _from_ts_date(raw["trade_date"]),
-                        "adj_factor": pd.to_numeric(raw["adj_factor"]),
-                    }
+                normalize(
+                    raw,
+                    self._spec.responses["adjust_factors"],
+                    source=self.source,
+                    mapper=self._mapper,
                 )
             )
         if not frames:
@@ -289,11 +278,8 @@ class TushareAdapter(BaseAdapter):
             start_date=_to_ts_date(start),
             end_date=_to_ts_date(end),
         )
-        return pd.DataFrame(
-            {
-                "date": _from_ts_date(raw["cal_date"]),
-                "is_open": pd.to_numeric(raw["is_open"]).astype(bool),
-            }
+        return normalize(
+            raw, self._spec.responses["trade_calendar"], source=self.source
         ).sort_values("date")
 
     # ------------------------------------------------------------------ 内部

@@ -21,18 +21,7 @@ from fin_data_hub.errors import SourceError, UnsupportedCapability
 from fin_data_hub.mapping import get_mapper
 from fin_data_hub.ratelimit import default_rate_limiter_set
 from fin_data_hub.sources.base import BaseAdapter
-
-_LOT_TO_SHARE = 100
-
-_HIST_COLUMN_MAP = {
-    "日期": "date",
-    "开盘": "open",
-    "收盘": "close",
-    "最高": "high",
-    "最低": "low",
-    "成交量": "volume",
-    "成交额": "amount",
-}
+from fin_data_hub.specs import load_spec, normalize
 
 
 def _date_param(value: str) -> str:
@@ -56,6 +45,7 @@ class AkShareAdapter(BaseAdapter):
         self._ak = ak_module if ak_module is not None else _default_module()
         self._mapper = get_mapper(self.source)
         self._rate_limits = default_rate_limiter_set(self.source)
+        self._spec = load_spec(self.source)
 
     # ------------------------------------------------------------------ 行情
     def fetch_bars(
@@ -106,7 +96,13 @@ class AkShareAdapter(BaseAdapter):
 
         if raw.empty:
             return _empty_bars()
-        return _map_hist(raw, code)
+        frame = normalize(
+            raw,
+            self._spec.responses["bars"],
+            source=self.source,
+            code=code.canonical,
+        )
+        return frame.sort_values("date").reset_index(drop=True)
 
     # -------------------------------------------------------------- 基金净值
     def fetch_fund_nav(
@@ -139,21 +135,11 @@ class AkShareAdapter(BaseAdapter):
         )
         if raw.empty:
             return _empty_nav()
-        missing = [c for c in ("净值日期", "单位净值") if c not in raw.columns]
-        if missing:
-            raise SourceError(f"AkShare 净值缺少列 {missing}")
-        nav = pd.DataFrame(
-            {
-                "code": code.canonical,
-                "date": pd.to_datetime(raw["净值日期"]).astype("datetime64[ns]"),
-                "unit_nav": pd.to_numeric(raw["单位净值"]),
-                "accum_nav": pd.NA,
-                "daily_return": (
-                    pd.to_numeric(raw["日增长率"])
-                    if "日增长率" in raw.columns
-                    else pd.NA
-                ),
-            }
+        nav = normalize(
+            raw,
+            self._spec.responses["fund_nav"],
+            source=self.source,
+            code=code.canonical,
         ).sort_values("date")
         if start:
             nav = nav[nav["date"] >= pd.to_datetime(_date_param(start))]
@@ -192,26 +178,6 @@ class AkShareAdapter(BaseAdapter):
         if result is None:
             return pd.DataFrame()
         return pd.DataFrame(result)
-
-
-def _map_hist(raw: pd.DataFrame, code: SecCode) -> pd.DataFrame:
-    missing = [c for c in _HIST_COLUMN_MAP if c not in raw.columns]
-    if missing:
-        raise SourceError(f"AkShare 行情缺少列 {missing}")
-    renamed = raw.rename(columns=_HIST_COLUMN_MAP)
-    out = pd.DataFrame(
-        {
-            "code": code.canonical,
-            "date": pd.to_datetime(renamed["date"]).astype("datetime64[ns]"),
-            "open": pd.to_numeric(renamed["open"]),
-            "high": pd.to_numeric(renamed["high"]),
-            "low": pd.to_numeric(renamed["low"]),
-            "close": pd.to_numeric(renamed["close"]),
-            "volume": pd.to_numeric(renamed["volume"]) * _LOT_TO_SHARE,
-            "amount": pd.to_numeric(renamed["amount"]),
-        }
-    )
-    return out.sort_values("date").reset_index(drop=True)
 
 
 def _empty_bars() -> pd.DataFrame:

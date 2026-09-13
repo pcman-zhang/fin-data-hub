@@ -135,6 +135,7 @@ _MAPPERS: dict[Source, CodeMapper] = {
     Source.TUSHARE: PassthroughMapper(),
     Source.WIND: PassthroughMapper(),
     Source.IFIND: PassthroughMapper(),
+    Source.FUYAO: PassthroughMapper(),
     Source.AKSHARE: AkShareMapper(),
     Source.BAOSTOCK: BaoStockMapper(),
 }

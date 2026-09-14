@@ -1,11 +1,11 @@
 dataset: cn_equity.financials.balance_sheet
 semantic_version: 1
 domain: cn_equity
-description: 资产负债表（核心列；append-only 版本，按公告日知识时间）
+description: 资产负债表（核心列；append-only 版本，按公告日知识时间；以 issuer_id 为键）
 pit_class: versioned
-business_key: [entity_id, end_date, report_type]
-physical_key: [entity_id, end_date, report_type, knowledge_time, version]
-grain: 标的 × 报告期 × 报表类型
+business_key: [issuer_id, end_date, report_type]
+physical_key: [issuer_id, end_date, report_type, knowledge_time, version]
+grain: 发行主体 × 报告期 × 报表类型
 update_sla:
   frequency: quarterly
   earliest_available: "公告日 T+0"
@@ -15,7 +15,7 @@ sources:
   - provider: tushare
     endpoint: balancesheet
 coverage:
-  universe: A 股（含退市）
+  universe: A 股发行主体（含退市）
   universe_source: ref.entity
   history_start: "1990-12-19"
   expected_dates:
@@ -30,14 +30,14 @@ storage:
   retention: all
   compression:
     after: 30 days
-    segment_by: entity_id
+    segment_by: issuer_id
     order_by: end_date
 quality:
   - rule: unique
-    keys: [entity_id, end_date, report_type, knowledge_time, version]
+    keys: [issuer_id, end_date, report_type, knowledge_time, version]
     severity: error
   - rule: not_null
-    fields: [entity_id, ann_date, end_date, report_type]
+    fields: [issuer_id, ann_date, end_date, report_type]
     severity: error
   - rule: range
     field: total_assets
@@ -66,10 +66,10 @@ mappings:
       goodwill: goodwill
       total_hldr_eqy_exc_min_int: total_hldr_eqy_exc_min_int
 fields:
-  - name: entity_id
+  - name: issuer_id
     type: int64
     nullable: false
-    description: 标的 ID
+    description: 发行主体 ID（ref.entity，entity_type=issuer）
     pit_role: none
   - name: ann_date
     type: date

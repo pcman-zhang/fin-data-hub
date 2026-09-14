@@ -1,4 +1,4 @@
-# AGENTS.md — fin-data-hub
+# AGENTS.md — fin-data-platform
 
 ## 项目性质（最重要）
 - 这是一个 **Python 库**，不是可执行程序/服务：提供可被其他程序 `import` 的模块，不要引入 CLI、常驻进程或调度器作为主入口。

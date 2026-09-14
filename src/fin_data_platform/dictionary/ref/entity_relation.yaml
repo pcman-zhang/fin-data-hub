@@ -1,0 +1,79 @@
+dataset: ref.entity_relation
+semantic_version: 1
+domain: ref
+description: 实体关系（单向存储；双向查询由 relation_type_dict.inverse_relation 驱动）
+pit_class: scd2
+business_key: [entity_id, related_id, relation_type, valid_from]
+physical_key: [entity_id, related_id, relation_type, valid_from, knowledge_time, version]
+grain: 实体 × 关系类型 × 关系对象 × 生效区间
+update_sla:
+  frequency: daily
+  earliest_available: "T+1 08:00"
+  latest_available: "T+1 22:00"
+  tolerance: "1d"
+sources: []
+coverage:
+  universe: 已登记实体间关系
+  universe_source: ref.entity
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: daily
+storage:
+  canonical_table: ref.entity_relation
+  read_model: mart.entity_relation_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [entity_id, related_id, relation_type, valid_from, knowledge_time, version]
+    severity: error
+  - rule: not_null
+    fields: [entity_id, related_id, relation_type, valid_from, knowledge_time, version]
+    severity: error
+  - rule: reconcile
+    against: ref.entity
+    severity: warn
+lineage:
+  upstream:
+    - dataset: ref.entity
+  transform: derive
+mappings: []
+fields:
+  - name: entity_id
+    type: int64
+    nullable: false
+    description: 关系主体实体 ID
+    pit_role: none
+  - name: related_id
+    type: int64
+    nullable: false
+    description: 关系对象实体 ID
+    pit_role: none
+  - name: relation_type
+    type: string
+    nullable: false
+    description: 关系词（必须登记于 ref.relation_type_dict）
+    pit_role: none
+  - name: valid_from
+    type: date
+    nullable: false
+    description: 关系区间起点（SCD2 闭区间）
+    pit_role: event_time
+  - name: valid_to
+    type: date
+    nullable: true
+    description: 关系区间终点（NULL=至今）
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 同关系版本号（append-only）
+    pit_role: none

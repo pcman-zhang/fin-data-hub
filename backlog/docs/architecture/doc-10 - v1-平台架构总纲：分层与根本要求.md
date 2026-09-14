@@ -3,7 +3,7 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-14 04:39'
+updated_date: '2026-09-14 08:18'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
@@ -91,7 +91,7 @@ updated_date: '2026-09-14 04:39'
 - **明确不做**：① 交易状态（上市/停牌/ST/退市）不在注册表——由交易状态数据集承载（`cn_equity.listing_lifecycle` + 事件接口 suspension/st），**PIT Universe 由数据集推导**；② `attrs` per-type schema 治理（v1.1）；③ Entity Graph 多跳遍历（v2）。
 - **读模型**：`mart.entity_latest_v1`（当前态视图）；as-of 用 `mart.entity_asof(ts)` 表函数或 SDK 构造器（PG 视图不可带参）；SDK/REST 只读 mart。
 - **关键流程**：注册/刷新（Hub 基础信息 + namechange 身份属性）→ `resolve(code)`（含旧码）→ `universe(as_of)`（**由生命周期/交易状态数据集推导**）→ 属性 as-of（SCD2）。
-- **待实施（TASK-3.15）**：分类面收敛、issuer、relation+字典、external_id、读模型、财务改挂 `issuer_id`、`cn_equity.listing_lifecycle` 数据集。
+- **已落地（TASK-3.15）**：分类面收敛、issuer、relation+字典（词表驱动）、external_id、读模型（`mart.entity_latest_v1` / `entity_asof`）、财务改挂 `issuer_id`、`cn_equity.listing_lifecycle` 数据集。
 
 ### 3.4 Cache 非权威原则（Cache Never Owns Data）
 

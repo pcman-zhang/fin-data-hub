@@ -3,8 +3,8 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fin-data-hub"
-description = "多源金融数据聚合库：统一接口获取 Tushare / Wind / 同花顺 iFinD / AkShare 数据"
+name = "fin-data-platform"
+description = "金融数据平台：多源接入（Tushare / Wind / 同花顺 iFinD / AkShare 等）+ PIT 持久化 + 统一服务"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -46,6 +46,7 @@ fin_data_platform = [
     "dictionary/_schema/*.json",
     "dictionary/*/*.yaml",
     "dictionary/*/*/*.yaml",
+    "registry/*.yaml",
 ]
 
 [tool.pytest.ini_options]

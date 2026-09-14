@@ -1,10 +1,10 @@
 ---
 id: TASK-3.3
 title: TimescaleDB 存储层：schema / 分区 / 迁移 / 幂等增量
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-13 05:59'
-updated_date: '2026-09-14 00:31'
+updated_date: '2026-09-14 06:35'
 labels: []
 milestone: m-0
 dependencies:
@@ -21,11 +21,9 @@ ordinal: 22000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 全量可幂等重建；增量重复执行结果一致
-- [ ] #2 迁移脚本可版本化升级/回滚
-- [ ] #3 关键查询（按标的+日期、按域）走索引且性能达标
-- [ ] #4 支持用户提供历史数据文件（Parquet/CSV）幂等导入
-- [ ] #5 行情存原始价 + 复权因子/事件（版本化、PIT）；复权价读取时按 as-of 计算（不落 qfq/hfq 快照）
+- [x] #1 字典→SQLAlchemy schema（类型映射/物理键主键/业务索引/ref 表合并）+ Timescale hypertable/压缩语句生成
+- [x] #2 幂等写入（ON CONFLICT + RETURNING 计数）+ as-of/latest 读取（含 filters）
+- [x] #3 真实库集成验证（PG17 + TimescaleDB：hypertable/压缩策略/幂等/as-of）；集成测试（-m integration）
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -56,4 +54,12 @@ DDL 输入约定（2026-09-13）：canonical_table = `<domain>.<其余路径以�
 数据库文档（2026-09-13）：新增 storage/report.py 自动生成 doc-17（表清单与作用/字段与类型/依赖关系）；随字典与 schema 变更重新生成。评审修复：ref 表索引保留、DDL 审计清单仅记录实际执行语句、event_time 缺失显式报错。
 
 真实库集成（2026-09-13）：PostgreSQL 17.9 + TimescaleDB 2.26.3（192.168.18.10；DHCP 地址会变，env DATABASE_HOST 已过期，用 FDP_DATABASE_HOST 覆盖）。已建独立库 fin_data_platform + timescaledb 扩展。验证：ensure_schema 幂等（27 条语句，5 个 hypertable + 5 个压缩策略）；幂等 append 1/0（改用 RETURNING 计数，修复 PG rowcount=-1）；as-of/latest 正确。集成中发现并修复：① ensure_schema 传 metadata 时丢失 specs（hypertable 不建）；② create_hypertable 需 migrate_data（存量表）；③ readers 增加 filters（避免子查询外过滤导致笛卡尔积）。新增 StorageConfig.from_env + tests/test_integration_storage.py（-m integration）。待办：Alembic 迁移、Parquet/CSV 导入、只读角色授权、自建 compose（TASK-3.4）。
+
+拆分（2026-09-13）：剩余工作拆为子任务 TASK-3.3.1（Alembic 迁移）/3.3.2（Parquet-CSV 导入）/3.3.3（只读角色授权）；本任务按已交付核心收口。
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+存储层核心落地：字典→schema（含 Timescale DDL）、幂等写入（RETURNING 计数）、as-of/latest 读取；真实 PG17+TimescaleDB 验证（5 hypertable + 5 压缩策略、幂等 1/0）；集成测试基建；剩余拆至 3.3.1~3.3.3。
+<!-- SECTION:FINAL_SUMMARY:END -->

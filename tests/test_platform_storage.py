@@ -52,6 +52,15 @@ def test_metadata_from_dictionary() -> None:
         index.name == "ix_daily_bar_business" for index in table.indexes
     )
     assert specs["cn_equity.daily_bar"].dataset == "cn_equity.daily_bar"
+    # 财务数据集以 issuer_id 为业务键（doc-10 §3.3：财务/股东/公司事件挂 issuer）
+    financials = metadata.tables["cn_equity.financials_balance_sheet"]
+    assert [column.name for column in financials.primary_key] == [
+        "issuer_id",
+        "end_date",
+        "report_type",
+        "knowledge_time",
+        "version",
+    ]
 
 
 def test_ref_indexes_preserved_after_merge() -> None:
@@ -127,16 +136,24 @@ def test_database_document_generated() -> None:
         "cn_equity.daily_bar",
         "cn_equity.financials_balance_sheet",
         "cn_equity.index_member",
+        "cn_equity.listing_lifecycle",
         "cn_fund.nav",
         "ref.entity",
         "ref.entity_code_history",
+        "ref.entity_relation",
+        "ref.entity_external_id",
+        "ref.relation_type_dict",
     ):
         assert f"`{key}`" in document
     assert "## 1. 表清单与作用" in document
     assert "## 2. 字段与类型" in document
     assert "## 3. 表依赖关系" in document
     assert "NUMERIC(24, 4)" in document
-    assert "ref.entity（entity_id 逻辑引用）" in document
+    assert "ref.entity（entity_id/issuer_id 逻辑引用）" in document
+    assert (
+        "`cn_equity.financials_balance_sheet` ← "
+        "ref.entity（entity_id/issuer_id 逻辑引用）"
+    ) in document
 
 
 def test_as_of_and_latest_queries(engine) -> None:

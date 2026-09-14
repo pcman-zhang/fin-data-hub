@@ -118,10 +118,17 @@ _ACCESS: dict[str, str] = {
     "cn_equity.index_member": 'get_reference("industry_member")',
     "cn_equity.financials.balance_sheet": 'get_financials(kind="balance_sheet")',
     "cn_equity.market_events.namechange": 'get_market_events(kind="namechange")',
+    "cn_equity.listing_lifecycle": 'get_reference("stock_list") / 内部',
     "cn_fund.nav": "get_fund_nav",
     "ref.entity": "get_security_info / 内部",
     "ref.entity_code_history": "内部（Hub mapper）",
+    "ref.entity_relation": "内部（关系注册）",
+    "ref.entity_external_id": "内部（外部标识注册）",
+    "ref.relation_type_dict": "内部（关系词表）",
 }
+
+#: 实体键字段：直接挂实体的数据集（issuer_id 指发行主体，亦为 ref.entity）
+_ENTITY_FIELDS = frozenset({"entity_id", "issuer_id"})
 
 
 def catalog(root: Path | None = None) -> list[dict[str, str]]:
@@ -130,7 +137,7 @@ def catalog(root: Path | None = None) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for dataset, spec in sorted(specs.items()):
         has_entity = any(
-            field.name == "entity_id" or field.name.endswith("_entity_id")
+            field.name in _ENTITY_FIELDS or field.name.endswith("_entity_id")
             for field in spec.fields
         )
         rows.append(

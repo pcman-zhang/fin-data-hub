@@ -3,7 +3,7 @@ id: doc-17
 title: 数据库设计：表 / 字段 / 依赖（自动生成）
 type: specification
 created_date: '2026-09-13 14:07'
-updated_date: '2026-09-13 15:10'
+updated_date: '2026-09-14 08:18'
 ---
 # 数据库设计：表 / 字段 / 依赖（自动生成）
 
@@ -15,13 +15,17 @@ updated_date: '2026-09-13 15:10'
 |---|---|---|---|
 | `cn_equity.adj_factor` | 复权因子（累计后复权口径；事件步进，按知识时间版本化） | entity_id, trade_date, knowledge_time, version | event_time |
 | `cn_equity.daily_bar` | A 股日线行情（不复权原始价；复权价按 raw + factor、as-of 计算） | entity_id, trade_date, knowledge_time, version | event_time |
-| `cn_equity.financials_balance_sheet` | 资产负债表（核心列；append-only 版本，按公告日知识时间） | entity_id, end_date, report_type, knowledge_time, version | knowledge_time |
+| `cn_equity.financials_balance_sheet` | 资产负债表（核心列；append-only 版本，按公告日知识时间；以 issuer_id 为键） | issuer_id, end_date, report_type, knowledge_time, version | knowledge_time |
 | `cn_equity.index_member` | 申万行业成分（三级；区间型 PIT，含已剔除记录） | entity_id, l3_code, in_date | none |
 | `cn_equity.index_weight` | 指数成分与权重（月度快照；快照型 PIT，as-of 取最近一期） | index_entity_id, trade_date, con_entity_id, knowledge_time, version | event_time |
+| `cn_equity.listing_lifecycle` | 交易状态（上市/暂停/退市）；PIT Universe 权威来源，替代注册表交易状态 | entity_id, start_date, knowledge_time, version | none |
 | `cn_equity.market_events_namechange` | 名称变更历史（生效闭区间 + 公告日；用于 as-of 属性还原） | entity_id, start_date, knowledge_time, version | none |
 | `cn_fund.nav` | 场外基金净值（单位净值/累计净值；日频） | entity_id, date, knowledge_time, version | event_time |
-| `ref.entity` | 引用注册表（实体身份 + PIT 属性/生命周期；SCD2；instrument/series/basket） | entity_id, valid_from, knowledge_time, version | none |
+| `ref.entity` | 引用注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket） | entity_id, valid_from, knowledge_time, version | none |
 | `ref.entity_code_history` | canonical 代码履历（代码变更/复用 → 旧码仍可解析；替代多源别名表） | entity_id, code, valid_from, knowledge_time, version | none |
+| `ref.entity_external_id` | 实体外部标识（isin/figi/cusip/sedol/lei/uscc；不含 ticker） | entity_id, id_type, id_value, valid_from, knowledge_time, version | none |
+| `ref.entity_relation` | 实体关系（单向存储；双向查询由 relation_type_dict.inverse_relation 驱动） | entity_id, related_id, relation_type, valid_from, knowledge_time, version | none |
+| `ref.relation_type_dict` | 关系词表（新增关系词必须先登记；双向查询由 inverse_relation 驱动） | relation_type, valid_from, knowledge_time, version | none |
 
 ## 2. 字段与类型
 
@@ -59,7 +63,7 @@ updated_date: '2026-09-13 15:10'
 
 | 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
 |---|---|---|---|---|---|
-| `entity_id` | `BIGINT` | 否 |  | none | 标的 ID |
+| `issuer_id` | `BIGINT` | 否 |  | none | 发行主体 ID（ref.entity，entity_type=issuer） |
 | `ann_date` | `DATE` | 否 |  | publish_time | 公告日（知识时间来源） |
 | `end_date` | `DATE` | 否 |  | event_time | 报告期末（事件时间） |
 | `report_type` | `TEXT` | 否 |  | none | 报表类型（1 合并报表等） |
@@ -105,6 +109,19 @@ updated_date: '2026-09-13 15:10'
 | `version` | `BIGINT` | 否 |  | none | 同业务键版本号 |
 | `provider` | `VARCHAR(32)` | 否 |  | none | 数据来源 |
 
+### `cn_equity.listing_lifecycle`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `entity_id` | `BIGINT` | 否 |  | none | 标的 ID |
+| `status` | `VARCHAR(32)` | 否 |  | none | 交易状态（listed 上市/suspended 暂停上市/delisted 退市） |
+| `start_date` | `DATE` | 否 |  | event_time | 状态生效起始日（含当日） |
+| `end_date` | `DATE` | 是 |  | none | 状态生效结束日（含当日；NULL=至今） |
+| `reason` | `TEXT` | 是 |  | none | 状态变更原因 |
+| `knowledge_time` | `DATETIME` | 否 |  | knowledge_time | 该版本进入平台的时间 |
+| `version` | `BIGINT` | 否 |  | none | 同业务键版本号 |
+| `provider` | `VARCHAR(32)` | 否 |  | none | 数据来源 |
+
 ### `cn_equity.market_events_namechange`
 
 | 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
@@ -138,18 +155,17 @@ updated_date: '2026-09-13 15:10'
 | 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
 |---|---|---|---|---|---|
 | `entity_id` | `BIGINT` | 否 |  | none | 实体稳定代理键 |
-| `entity_type` | `VARCHAR(32)` | 否 |  | none | 实体类型 |
-| `code` | `TEXT` | 否 |  | none | canonical 代码（WindCode 风格） |
+| `entity_type` | `VARCHAR(32)` | 否 |  | none | 实体本体（粗分类） |
+| `entity_class` | `VARCHAR(32)` | 是 |  | none | 产品细分（entity_type 之下；缺省为未知） |
+| `market` | `VARCHAR(32)` | 是 |  | none | 市场面 |
+| `code` | `TEXT` | 否 |  | none | canonical 代码（WindCode 风格；issuer 取统一社会信用代码或平台码） |
 | `name` | `TEXT` | 否 |  | none | 时点名称（变更产生新 SCD2 行） |
-| `status` | `VARCHAR(32)` | 否 |  | none | 状态（instrument L/P/D；series/basket active/paused） |
-| `sec_type` | `VARCHAR(32)` | 是 |  | none | 标的类型（instrument 使用） |
 | `currency` | `TEXT` | 是 |  | none | ISO 4217 货币 |
 | `exchange` | `TEXT` | 是 |  | none | 交易所/市场 |
 | `frequency` | `TEXT` | 是 |  | none | 序列频率（series 使用） |
 | `unit` | `TEXT` | 是 |  | none | 单位（series 使用） |
-| `list_date` | `DATE` | 是 |  | event_time | 上市/起始日 |
-| `delist_date` | `DATE` | 是 |  | none | 退市日（NULL=在市；退市永久保留） |
 | `algorithm_id` | `TEXT` | 是 |  | none | 组合/派生序列对应算法（basket） |
+| `social_status` | `VARCHAR(32)` | 是 |  | none | 社会实体状态（issuer 专用：存续/倒闭/重整） |
 | `valid_from` | `DATE` | 否 |  | event_time | 属性区间起点（SCD2 闭区间） |
 | `valid_to` | `DATE` | 是 |  | none | 属性区间终点（NULL=至今） |
 | `knowledge_time` | `DATETIME` | 否 |  | knowledge_time | 该版本进入平台的时间 |
@@ -166,21 +182,61 @@ updated_date: '2026-09-13 15:10'
 | `knowledge_time` | `DATETIME` | 否 |  | knowledge_time | 该版本进入平台的时间 |
 | `version` | `BIGINT` | 否 |  | none | 版本号 |
 
+### `ref.entity_external_id`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `entity_id` | `BIGINT` | 否 |  | none | 实体 ID |
+| `id_type` | `VARCHAR(32)` | 否 |  | none | 外部标识类型（不含 ticker） |
+| `id_value` | `TEXT` | 否 |  | none | 外部标识值 |
+| `valid_from` | `DATE` | 否 |  | event_time | 标识区间起点（SCD2 闭区间） |
+| `valid_to` | `DATE` | 是 |  | none | 标识区间终点（NULL=至今） |
+| `knowledge_time` | `DATETIME` | 否 |  | knowledge_time | 该版本进入平台的时间 |
+| `version` | `BIGINT` | 否 |  | none | 同标识版本号（append-only） |
+
+### `ref.entity_relation`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `entity_id` | `BIGINT` | 否 |  | none | 关系主体实体 ID |
+| `related_id` | `BIGINT` | 否 |  | none | 关系对象实体 ID |
+| `relation_type` | `TEXT` | 否 |  | none | 关系词（必须登记于 ref.relation_type_dict） |
+| `valid_from` | `DATE` | 否 |  | event_time | 关系区间起点（SCD2 闭区间） |
+| `valid_to` | `DATE` | 是 |  | none | 关系区间终点（NULL=至今） |
+| `knowledge_time` | `DATETIME` | 否 |  | knowledge_time | 该版本进入平台的时间 |
+| `version` | `BIGINT` | 否 |  | none | 同关系版本号（append-only） |
+
+### `ref.relation_type_dict`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `relation_type` | `TEXT` | 否 |  | none | 关系词 |
+| `inverse_relation` | `TEXT` | 否 |  | none | 反向关系词（词表内成对登记） |
+| `description` | `TEXT` | 否 |  | none | 语义说明（主体 → 对象） |
+| `valid_from` | `DATE` | 否 |  | event_time | 生效起点（SCD2 闭区间） |
+| `valid_to` | `DATE` | 是 |  | none | 生效终点（NULL=至今） |
+| `knowledge_time` | `DATETIME` | 否 |  | knowledge_time | 该版本进入平台的时间 |
+| `version` | `BIGINT` | 否 |  | none | 同词条版本号（append-only） |
+
 ## 3. 表依赖关系（逻辑，无物理外键；doc-13 §4）
 
-> `entity_id` 为平台稳定代理键（BIGINT，代理键非源代码）；
+> `entity_id`/`issuer_id` 为平台稳定代理键（BIGINT，代理键非源代码）；
 > 按 doc-13 §4 **默认不建物理外键**（hypertable 压缩与批量回填约束、
 > SCD2 主键为 `(entity_id, valid_from)` 无法被事实表单列引用）。
 > 引用完整性由三层保障：① 写入管线校验；
 > ② 质量规则（`reconcile against: ref.entity`）；
 > ③ 读取时以 `entity_id` 关联 `ref.entity`（名称/类型/退市属性）。
 
-- `cn_equity.adj_factor` ← ref.entity（entity_id 逻辑引用）
-- `cn_equity.daily_bar` ← cn_equity.adj_factor（派生输入）；ref.entity（entity_id 逻辑引用）
-- `cn_equity.financials_balance_sheet` ← ref.entity（entity_id 逻辑引用）
-- `cn_equity.index_member` ← ref.entity（entity_id 逻辑引用）
-- `cn_equity.index_weight` ← ref.entity（entity_id 逻辑引用）
-- `cn_equity.market_events_namechange` ← ref.entity（entity_id 逻辑引用）
-- `cn_fund.nav` ← ref.entity（entity_id 逻辑引用）
+- `cn_equity.adj_factor` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_equity.daily_bar` ← cn_equity.adj_factor（派生输入）；ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_equity.financials_balance_sheet` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_equity.index_member` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_equity.index_weight` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_equity.listing_lifecycle` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_equity.market_events_namechange` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `cn_fund.nav` ← ref.entity（entity_id/issuer_id 逻辑引用）
 - `ref.entity` ← —（源数据）
-- `ref.entity_code_history` ← ref.entity（entity_id 逻辑引用）；ref.entity（血缘）
+- `ref.entity_code_history` ← ref.entity（entity_id/issuer_id 逻辑引用）；ref.entity（血缘）
+- `ref.entity_external_id` ← ref.entity（entity_id/issuer_id 逻辑引用）；ref.entity（血缘）
+- `ref.entity_relation` ← ref.entity（entity_id/issuer_id 逻辑引用）；ref.entity（血缘）
+- `ref.relation_type_dict` ← —（源数据）

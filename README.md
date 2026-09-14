@@ -1,23 +1,52 @@
-# FinDataPlatform（金融数据平台）
+# FinDataPlatform（金融数据基础设施）
 
-个人金融数据平台：多源数据接入 → 归一化 → PIT 持久化（PostgreSQL + TimescaleDB）→ 统一服务（SDK / REST / 管理台）。
+金融数据基础设施（Financial Data Infrastructure）：数据字典为契约、实体注册表为身份、PIT 存储为底座、派生引擎为产线；对外提供语义版本化的只读数据出口（Read Model）。
+
+```
+多源金融数据 → Canonical Schema → PIT Storage → Derived Data → Read Model → 消费层（SDK / REST / Export / …）
+```
 
 > 项目处于开发阶段，暂无外部使用者。
 
 ## 系统架构
 
-三层结构（设计见 `doc-10`）：
+平台不是应用后端，而是数据基础设施：Dictionary / Entity Registry / Storage / Derived Engine 四大件构成平台主体，REST 与 SDK 只是末端消费适配器（设计见 `doc-10`）。
 
 ```
-接入层   FinDataHub（Python 库）
-         唯一的数据源访问面：多源适配、canonical 代码与口径归一、每源限流、进程内缓存；不落数据
-   │  采集/回填（写入端按数据字典最小授权）
-数据层   控制面 | 调度 / 质量检查 / 数据字典与血缘 / 配额观测
-         数据面 | Raw → Canonical → Read Model（PostgreSQL + TimescaleDB）
-         缓存   | L1 进程内；L2 Redis（规划）
-   │  只读 Read Model
-服务层   FinDataPlatform      SDK / REST / 管理台 / 批量导出
+                 ┌──────────────┐
+                 │ Data Sources │   Tushare / Wind / iFinD / AkShare / Fuyao / BaoStock
+                 └──────┬───────┘
+                        │
+                  FinDataHub            接入层：唯一数据源访问面（适配 / 归一 / 限流 / 缓存；不落数据）
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+   Dictionary      Entity Registry    Storage
+   契约 / 血缘      身份 / 关系 / PIT   Raw → Canonical → Mart
+        │               │               │
+        └───────────────┼───────────────┘
+                        │
+                  Derived Engine        派生引擎：算法登记 / as-of 输入 / 重述
+                        │
+                    Read Models         语义版本化的只读出口（mart.*_v）
+                        │
+        ┌───────────────┼───────────────┬───────────┐
+        │               │               │           │
+      SDK            REST           Export      (MCP…)
 ```
+
+按现代数据平台的三平面理解：
+
+- **Control Plane（`meta`）**：数据集注册、任务运行、watermark、质量结果、数据代次、算法注册与重述台账（`doc-13` §1）；
+- **Data Plane**：`raw`（源端原始）→ Canonical（按域的标准化表 + PIT 字段）→ `mart`（Read Model）；
+- **Consumption Plane**：SDK / REST / 批量导出 / 未来 MCP——只读适配器，不改变数据语义，也不构成平台核心。
+
+### 平台四大件
+
+- **数据字典（Dictionary）**：机读契约（字段 / 类型 / 单位 / PIT 角色 / 质量规则 / 血缘 / 映射）；schema、迁移与文档由字典生成或强校验（Schema First，`doc-11`）。
+- **实体注册表（Entity Registry）**：Entity Graph——实体身份与分类面、代码履历、关系（词表驱动双向查询）、外部标识；交易状态归数据集，PIT Universe 由数据集推导（`doc-10` §3.3）。
+- **PIT 存储（Storage）**：Raw → Canonical → Read Model 分层；事件时间与知识时间双轴；append-only 幂等写入；hypertable 分区与压缩；Alembic 版本化迁移（`doc-13`）。
+- **派生引擎（Derived Engine）**：存输入与算法，不存派生结果的多版本；算法登记（`algorithm_id`）与重述台账；as-of 输入防前视（`doc-10` §3.5）——**建设中**（TASK-3.12）。
 
 ### FinDataHub → 数据库（数据流）
 
@@ -39,13 +68,20 @@
 - **表形态**：时序事实 → hypertable（`daily_bar` / `adj_factor` / `cn_fund.nav`，分区 + 压缩）；版本化时序 → 按 `knowledge_time` 分区（`financials_balance_sheet`）；SCD2 属性区间（`ref.entity` / `index_member` / `listing_lifecycle`）；快照（`index_weight`）。
 - **PIT 双轴**：事件时间（`trade_date` / `end_date`）与知识时间（发布 / 入库）分离；as-of 查询 = 「知识时间 ≤ as_of 且按业务键取最新版本」，Canonical 不落 `is_latest` 列。
 - **Entity Graph（`ref`）**：实体身份与分类面（`entity`）、代码履历（`entity_code_history`）、关系（`entity_relation` + 词表 `relation_type_dict`，单向存储、词表驱动双向查询）、外部标识（`entity_external_id`：ISIN/LEI/USCC 等）；交易状态归数据集（`cn_equity.listing_lifecycle`），PIT Universe 由数据集推导。
-- **读模型**：`mart.entity_latest_v1`（当前态视图）与 `mart.entity_asof(ts)`（属性 as-of 表函数）已落地；其余数据集读模型已在字典声明，随服务层建设生成。
+- **读模型**：`mart.entity_latest_v1`（当前态视图）与 `mart.entity_asof(ts)`（属性 as-of 表函数）已落地；其余数据集读模型已在字典声明，随消费层建设生成。
 - **迁移**：Alembic 版本化；基线由数据字典生成（含 hypertable / 压缩 / 读模型），`upgrade()` / `downgrade()` 幂等可重复。
 - 自动生成文档：表 / 字段 / 依赖（`doc-17`）、数据目录（`doc-19`）。
 
-### FinDataPlatform 如何使用
+### 消费方式
 
-使用者入口是**只读客户端**（SDK/REST，建设中）：客户端只读 Read Model，不直读 Raw / Canonical 物理表；服务以 Docker Compose 独立部署（TASK-3.4），客户端接入见 `doc-12`（TASK-3.7 / 3.11）。
+平台提供多种只读出口（建设中），SDK/REST 只是其中两种适配器：
+
+- **SDK 直连 Read Model**（SDK direct mode，`doc-12`）：不必经过 API Server；
+- **REST**：薄封装（`doc-12`；TASK-3.7）；
+- **批量导出 / DuckDB**：研究通道（TASK-3.10）；
+- 未来 MCP 等。
+
+消费层只读 `mart`，不直读 Raw / Canonical 物理表。
 
 当前仓库内已可用的能力（开发/运维用法）：
 
@@ -54,27 +90,28 @@
 - `fin_data_platform.storage`：按字典生成 schema、幂等写入、as-of / latest 读取、实体读模型；
 - `fin_data_platform.storage.migrations`：Alembic 升级 / 回滚。
 
-当前部署现状：`docker-compose.dev.yml` 只运行**开发用 TimescaleDB（PostgreSQL 17）数据库**，**没有任何 Backend 程序在运行**。
+当前部署现状：`docker-compose.dev.yml` 只运行**开发用 TimescaleDB（PostgreSQL 17）数据库**；平台核心（字典 / 注册表 / 存储 / 迁移）以 Python 库与数据库形态完整可用，**不依赖常驻 Backend**。
 
 ## 当前状态
 
-| 能力 | 状态 |
+| 平台能力 | 状态 |
 |---|---|
-| 接入层 FinDataHub：多源适配 / Router 复权路由 / 限流 / 缓存 / 计量 | ✅ 可用 |
-| 数据字典 + Schema First（meta-schema / CI 校验 / 数据目录） | ✅ 已落地（`doc-11` / `doc-17` / `doc-19`） |
-| 存储层：schema 生成 / 幂等写入 / as-of 读取 / 实体读模型 | ✅ 已落地（`doc-13`） |
+| 数据字典（契约 / CI 校验 / 数据目录 / 血缘） | ✅ 已落地（`doc-11` / `doc-17` / `doc-19`） |
+| 实体注册表 Entity Graph（身份 / 关系 / 外部标识 / PIT Universe） | ✅ 已落地（`doc-10` §3.3） |
+| PIT 存储（schema 生成 / 幂等写入 / as-of 读取 / 实体读模型） | ✅ 已落地（`doc-13`） |
 | 版本化迁移（Alembic，字典生成基线） | ✅ 已落地 |
-| 引用注册表 / Entity Graph | ✅ 已落地（`doc-10` §3.3） |
-| Parquet/CSV 导入通道 / 数据质量检查 / 采集调度与增量同步 | 🚧 建设中（TASK-3.3.2 / 3.5 / 3.6） |
+| 数据源接入 FinDataHub（多源适配 / Router / 限流 / 缓存 / 计量） | ✅ 可用 |
 | 派生引擎 / 时序查询能力 | 🚧 建设中（TASK-3.12 / 3.13） |
-| REST / SDK 发布 / 管理台 / 批量导出 | 🚧 建设中（TASK-3.7 / 3.8 / 3.10 / 3.11） |
-| Docker 部署（应用镜像 / 编排 / 健康检查） | 🚧 建设中（TASK-3.4）；当前仅 dev 数据库容器 |
+| Control Plane（`meta`：质量 / 调度 / 代次 / 算法台账） | 🚧 建设中（TASK-3.5 / 3.6 / 3.12） |
+| 采集调度与增量同步 / Parquet-CSV 导入通道 | 🚧 建设中（TASK-3.3.2 / 3.6） |
+| 消费层（SDK / REST / 管理台 / 批量导出 / MCP） | 🚧 建设中（TASK-3.7 / 3.8 / 3.10 / 3.11） |
+| 部署（Docker Compose 编排：数据库 / 服务） | 🚧 仅 dev 数据库；应用编排 TASK-3.4 |
 
 设计文档（Backlog）：`doc-10` 架构总纲、`doc-11` 数据字典规范、`doc-12` REST 契约、`doc-13` 存储策略、`doc-17` 数据库设计、`doc-18` 代码与标识标准、`doc-19` 数据目录。
 
 ## 安装
 
-平台使用者通过**客户端**只读访问已部署的服务（SDK/REST 建设中，见 TASK-3.7 / 3.11）：
+平台使用者通过**只读客户端**消费 Read Model（SDK direct mode 或经服务；建设中，见 `doc-12` / TASK-3.7 / 3.11）：
 
 ```bash
 pip install fin-data-platform

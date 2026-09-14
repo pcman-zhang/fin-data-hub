@@ -4,7 +4,7 @@ title: README 叙事重构：数据基础设施（四大件 / 三平面 / 消费
 status: Done
 assignee: []
 created_date: '2026-09-14 11:11'
-updated_date: '2026-09-14 11:45'
+updated_date: '2026-09-14 12:25'
 labels: []
 dependencies: []
 parent_task_id: TASK-3
@@ -40,6 +40,7 @@ ordinal: 55000
 - [x] #11 开头改为问题导向：明确 FinDataPlatform 是具备 PIT 语义的金融数据底座，解决的问题（多源统一 / As-Of / 重述 / 实体身份 / 派生治理 / 统一出口），再讲组成
 - [x] #12 明确 Platform Core（Dictionary/Registry/Storage/Derived）与 Consumption Adapter（SDK/REST/Export/MCP）分层职责：Backend 不是平台主体，只是入口
 - [x] #13 部署表述改为可选组件语义：平台核心可作为纯库运行、不依赖常驻服务进程；REST/MCP/调度器为可选消费或运维组件
+- [x] #14 新增「边界与路线图」章节：V1（必须）/ V1.5（仅预留接口、无实现）/ V2（未来）/ 永不进入平台（Alpha Factor、Backtest、Execution、Broker Gateway 属量化投研平台）
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -60,6 +61,8 @@ ordinal: 55000
 叙事重构（按评审意见）：① 定位改为数据基础设施（Financial Data Infrastructure），顶部流程图 = Sources → FinDataHub → Dictionary/Registry/Storage → Derived Engine → Read Model → 消费层；② 引入 Control/Data/Consumption 三平面；③ 平台四大件（Dictionary / Entity Registry / PIT Storage / Derived Engine）成节，Derived Engine 一级呈现；④ 消费方式重写：SDK direct mode 为合法路径、REST 降为薄封装，部署现状改为中性表述（仅 dev 数据库、不依赖常驻 Backend）；⑤ 状态表按平台能力重排。验证：grep 无服务层/三层结构/平台包源 extras，pytest 328 passed / ruff / mypy 全绿，代码零改动。
 
 第二轮评审调整（已落地）：① 开头改为问题导向（PIT 语义底座 + 多源统一 / As-Of / 重述 / 实体身份 / 派生治理 / 统一出口）；② 架构节明确 Platform Core 与 Consumption Adapter 分层，并加 Iceberg/Delta 类比；③ 部署表述改为「核心可纯库运行，不依赖常驻服务进程；REST / MCP / 调度器为可选组件」；④ 章节标题同步为 Platform Core（平台四大件）/ Consumption Adapter（消费适配器）。验证：328 单测 / ruff / mypy 全绿，代码零改动。
+
+补充（2026-09-14）：新增「边界与路线图」章节——V1 必须（Dictionary/Storage/Entity Registry/PIT/Runtime/Derived Engine/Read Model/REST/SDK）；V1.5 仅预留接口（Knowledge/RAG/Agent/Factor Provider，只有抽象无实现）；V2 未来（FIN-RAG/Research Copilot/NL Query/Portfolio Assistant）；永不进入平台（Alpha Factor/Backtest/Execution/Broker Gateway，属量化投研平台）。验证：328 单测 / ruff / mypy 全绿。
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -78,4 +81,6 @@ created: 2026-09-14 11:11
 README 完成数据基础设施叙事重构：顶部架构图为 Sources → FinDataHub → Dictionary/Entity Registry/Storage → Derived Engine → Read Model → 消费层（SDK/REST/Export/MCP）；平台四大件成节、Derived Engine 一级呈现；引入 Control/Data/Consumption 三平面；消费方式明确 SDK direct mode 与 REST 薄封装定位，部署现状中性表述（仅 dev 数据库、不依赖常驻 Backend）；安装为客户端 pip install fin-data-platform（无数据源 extras），接入层预留 fin-data-hub 包名。验证：328 单测 + ruff/mypy 通过，代码零改动。
 
 追加（二轮评审）：问题导向开头（PIT 底座解决六类问题）；Platform Core 与 Consumption Adapter 职责分层（Backend 仅为入口，类比 Iceberg/Delta）；平台核心可纯库运行，REST/MCP/调度器为可选消费或运维组件。
+
+追加：「边界与路线图」章节落定 V1/V1.5/V2/永不进入平台四档边界，明确因子、回测、执行与交易网关不在平台范围。
 <!-- SECTION:FINAL_SUMMARY:END -->

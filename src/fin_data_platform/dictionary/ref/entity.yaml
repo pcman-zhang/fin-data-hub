@@ -1,0 +1,128 @@
+dataset: ref.entity
+semantic_version: 1
+domain: ref
+description: 引用注册表（实体身份 + PIT 属性/生命周期；SCD2；instrument/series/basket）
+pit_class: scd2
+business_key: [entity_id, valid_from]
+physical_key: [entity_id, valid_from, knowledge_time, version]
+grain: 实体 × 属性生效区间
+update_sla:
+  frequency: daily
+  earliest_available: "T+1 08:00"
+  latest_available: "T+1 22:00"
+  tolerance: "1d"
+sources: []
+coverage:
+  universe: 全域实体（证券含退市；序列/组合按需接入）
+  universe_source: self
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: daily
+storage:
+  canonical_table: ref.entity
+  read_model: mart.entity_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [entity_id, valid_from, knowledge_time, version]
+    severity: error
+  - rule: not_null
+    fields: [entity_id, entity_type, code, name, valid_from, knowledge_time, version]
+    severity: error
+lineage:
+  upstream: []
+  transform: raw
+mappings: []
+fields:
+  - name: entity_id
+    type: int64
+    nullable: false
+    description: 实体稳定代理键
+    pit_role: none
+  - name: entity_type
+    type: enum
+    enum: [instrument, series, basket]
+    nullable: false
+    description: 实体类型
+    pit_role: none
+  - name: code
+    type: string
+    nullable: false
+    description: canonical 代码（WindCode 风格）
+    pit_role: none
+  - name: name
+    type: string
+    nullable: false
+    description: 时点名称（变更产生新 SCD2 行）
+    pit_role: none
+  - name: status
+    type: enum
+    enum: [L, P, D, active, paused]
+    nullable: false
+    description: 状态（instrument L/P/D；series/basket active/paused）
+    pit_role: none
+  - name: sec_type
+    type: enum
+    enum: [stock, etf, lof, fund, index, future, option, bond, fx_pair]
+    nullable: true
+    description: 标的类型（instrument 使用）
+    pit_role: none
+  - name: currency
+    type: string
+    nullable: true
+    description: ISO 4217 货币
+    pit_role: none
+  - name: exchange
+    type: string
+    nullable: true
+    description: 交易所/市场
+    pit_role: none
+  - name: frequency
+    type: string
+    nullable: true
+    description: 序列频率（series 使用）
+    pit_role: none
+  - name: unit
+    type: string
+    nullable: true
+    description: 单位（series 使用）
+    pit_role: none
+  - name: list_date
+    type: date
+    nullable: true
+    description: 上市/起始日
+    pit_role: event_time
+  - name: delist_date
+    type: date
+    nullable: true
+    description: 退市日（NULL=在市；退市永久保留）
+    pit_role: none
+  - name: algorithm_id
+    type: string
+    nullable: true
+    description: 组合/派生序列对应算法（basket）
+    pit_role: none
+  - name: valid_from
+    type: date
+    nullable: false
+    description: 属性区间起点（SCD2 闭区间）
+    pit_role: event_time
+  - name: valid_to
+    type: date
+    nullable: true
+    description: 属性区间终点（NULL=至今）
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 同实体版本号（append-only）
+    pit_role: none

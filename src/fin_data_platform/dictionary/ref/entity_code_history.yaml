@@ -1,0 +1,68 @@
+dataset: ref.entity_code_history
+semantic_version: 1
+domain: ref
+description: canonical 代码履历（代码变更/复用 → 旧码仍可解析；替代多源别名表）
+pit_class: scd2
+business_key: [entity_id, code, valid_from]
+physical_key: [entity_id, code, valid_from, knowledge_time, version]
+grain: 实体 × 代码 × 生效区间
+update_sla:
+  frequency: daily
+  earliest_available: "T+1 08:00"
+  latest_available: "T+1 22:00"
+  tolerance: "1d"
+sources: []
+coverage:
+  universe: 全域实体
+  universe_source: ref.entity
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: daily
+storage:
+  canonical_table: ref.entity_code_history
+  read_model: mart.entity_code_history_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [entity_id, code, valid_from, knowledge_time, version]
+    severity: error
+lineage:
+  upstream:
+    - dataset: ref.entity
+  transform: derive
+mappings: []
+fields:
+  - name: entity_id
+    type: int64
+    nullable: false
+    description: 实体稳定代理键
+    pit_role: none
+  - name: code
+    type: string
+    nullable: false
+    description: canonical 代码（含历史代码）
+    pit_role: none
+  - name: valid_from
+    type: date
+    nullable: false
+    description: 代码生效起始
+    pit_role: event_time
+  - name: valid_to
+    type: date
+    nullable: true
+    description: 代码失效日（NULL=至今）
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 版本号
+    pit_role: none

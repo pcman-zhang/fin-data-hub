@@ -21,7 +21,17 @@ ifind = ["httpx>=0.27"]
 wind = ["httpx>=0.27"]
 fuyao = ["httpx>=0.27"]
 baostock = ["baostock>=0.8"]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.10", "pandas-stubs>=2.2", "httpx>=0.27"]
+platform = ["pydantic>=2.7", "pyyaml>=6.0", "sqlalchemy>=2.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pandas-stubs>=2.2",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "sqlalchemy>=2.0",
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "fin_data_hub._version.__version__" }
@@ -31,6 +41,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 fin_data_hub = ["py.typed", "specs/*.toml"]
+fin_data_platform = [
+    "py.typed",
+    "dictionary/_schema/*.json",
+    "dictionary/*/*.yaml",
+    "dictionary/*/*/*.yaml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -48,8 +64,8 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-packages = ["fin_data_hub"]
+packages = ["fin_data_hub", "fin_data_platform"]
 
 [[tool.mypy.overrides]]
-module = ["tushare.*", "akshare.*", "baostock.*"]
+module = ["tushare.*", "akshare.*", "baostock.*", "yaml.*"]
 ignore_missing_imports = true

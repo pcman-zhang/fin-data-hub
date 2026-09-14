@@ -1,0 +1,181 @@
+dataset: cn_equity.financials.balance_sheet
+semantic_version: 1
+domain: cn_equity
+description: 资产负债表（核心列；append-only 版本，按公告日知识时间）
+pit_class: versioned
+business_key: [entity_id, end_date, report_type]
+physical_key: [entity_id, end_date, report_type, knowledge_time, version]
+grain: 标的 × 报告期 × 报表类型
+update_sla:
+  frequency: quarterly
+  earliest_available: "公告日 T+0"
+  latest_available: "公告日 T+0 23:59"
+  tolerance: "1d"
+sources:
+  - provider: tushare
+    endpoint: balancesheet
+coverage:
+  universe: A 股（含退市）
+  universe_source: ref.entity
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.report_periods
+    frequency: quarterly
+storage:
+  canonical_table: cn_equity.financials_balance_sheet
+  read_model: mart.equity_balance_sheet_v1
+  read_model_impl: view
+  partition_strategy: knowledge_time
+  partition_interval: 6 months
+  retention: all
+  compression:
+    after: 30 days
+    segment_by: entity_id
+    order_by: end_date
+quality:
+  - rule: unique
+    keys: [entity_id, end_date, report_type, knowledge_time, version]
+    severity: error
+  - rule: not_null
+    fields: [entity_id, ann_date, end_date, report_type]
+    severity: error
+  - rule: range
+    field: total_assets
+    min: 0
+    severity: warn
+  - rule: reconcile
+    against: ref.entity
+    severity: warn
+lineage:
+  upstream: []
+  transform: raw
+mappings:
+  - provider: tushare
+    endpoint: balancesheet
+    fields:
+      ann_date: ann_date
+      end_date: end_date
+      report_type: report_type
+      total_assets: total_assets
+      total_liab: total_liab
+      total_cur_assets: total_cur_assets
+      total_cur_liab: total_cur_liab
+      money_cap: money_cap
+      inventories: inventories
+      fix_assets: fix_assets
+      goodwill: goodwill
+      total_hldr_eqy_exc_min_int: total_hldr_eqy_exc_min_int
+fields:
+  - name: entity_id
+    type: int64
+    nullable: false
+    description: 标的 ID
+    pit_role: none
+  - name: ann_date
+    type: date
+    nullable: false
+    description: 公告日（知识时间来源）
+    pit_role: publish_time
+  - name: end_date
+    type: date
+    nullable: false
+    description: 报告期末（事件时间）
+    pit_role: event_time
+  - name: report_type
+    type: string
+    nullable: false
+    description: 报表类型（1 合并报表等）
+    pit_role: none
+  - name: total_assets
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 资产总计
+    pit_role: none
+  - name: total_liab
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 负债合计
+    pit_role: none
+  - name: total_cur_assets
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 流动资产合计
+    pit_role: none
+  - name: total_cur_liab
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 流动负债合计
+    pit_role: none
+  - name: money_cap
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 货币资金
+    pit_role: none
+  - name: inventories
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 存货
+    pit_role: none
+  - name: fix_assets
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 固定资产
+    pit_role: none
+  - name: goodwill
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 商誉
+    pit_role: none
+  - name: total_hldr_eqy_exc_min_int
+    type: decimal
+    precision: 24
+    scale: 4
+    unit: 元
+    nullable: true
+    description: 归母股东权益合计
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: ingest_time
+    type: timestamp_tz
+    nullable: false
+    description: 物理入库时间
+    pit_role: ingest_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 同业务键版本号（重述产生新版本）
+    pit_role: none
+  - name: provider
+    type: enum
+    enum: [tushare]
+    nullable: false
+    description: 数据来源
+    pit_role: none

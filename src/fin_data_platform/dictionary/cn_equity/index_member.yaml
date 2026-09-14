@@ -1,0 +1,104 @@
+dataset: cn_equity.index_member
+semantic_version: 1
+domain: cn_equity
+description: 申万行业成分（三级；区间型 PIT，含已剔除记录）
+pit_class: scd2
+business_key: [entity_id, l3_code, in_date]
+physical_key: [entity_id, l3_code, in_date]
+grain: 标的 × 三级行业 × 生效区间
+update_sla:
+  frequency: weekly
+  earliest_available: "T+1 12:00"
+  latest_available: "T+2 22:00"
+  tolerance: "3d"
+sources:
+  - provider: tushare
+    endpoint: index_member_all
+coverage:
+  universe: A 股（含退市）
+  universe_source: ref.entity
+  history_start: "1993-10-08"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: weekly
+storage:
+  canonical_table: cn_equity.index_member
+  read_model: mart.index_member_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [entity_id, l3_code, in_date]
+    severity: error
+  - rule: expression
+    expr: "out_date >= in_date"
+    severity: error
+  - rule: reconcile
+    against: ref.entity
+    severity: warn
+lineage:
+  upstream: []
+  transform: raw
+mappings:
+  - provider: tushare
+    endpoint: index_member_all
+    fields:
+      entity_id: ts_code
+      l1_code: l1_code
+      l2_code: l2_code
+      l3_code: l3_code
+      in_date: in_date
+      out_date: out_date
+fields:
+  - name: entity_id
+    type: int64
+    nullable: false
+    description: 标的 ID
+    pit_role: none
+  - name: l1_code
+    type: string
+    nullable: false
+    description: 申万一级行业代码（index_code）
+    pit_role: none
+  - name: l1_name
+    type: string
+    nullable: false
+    description: 申万一级行业名称
+    pit_role: none
+  - name: l2_code
+    type: string
+    nullable: false
+    description: 申万二级行业代码
+    pit_role: none
+  - name: l2_name
+    type: string
+    nullable: false
+    description: 申万二级行业名称
+    pit_role: none
+  - name: l3_code
+    type: string
+    nullable: false
+    description: 申万三级行业代码
+    pit_role: none
+  - name: l3_name
+    type: string
+    nullable: false
+    description: 申万三级行业名称
+    pit_role: none
+  - name: in_date
+    type: date
+    nullable: false
+    description: 纳入日期（区间起点，含当日）
+    pit_role: event_time
+  - name: out_date
+    type: date
+    nullable: true
+    description: 剔除日期（区间终点，含当日；NULL=至今）
+    pit_role: none
+  - name: is_new
+    type: bool
+    nullable: false
+    description: 是否当前有效归属
+    pit_role: none

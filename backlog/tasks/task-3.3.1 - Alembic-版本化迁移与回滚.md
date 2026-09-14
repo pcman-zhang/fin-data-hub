@@ -4,7 +4,7 @@ title: Alembic 版本化迁移与回滚
 status: Done
 assignee: []
 created_date: '2026-09-14 06:33'
-updated_date: '2026-09-14 10:47'
+updated_date: '2026-09-14 11:02'
 labels: []
 dependencies: []
 parent_task_id: TASK-3.3
@@ -41,6 +41,16 @@ ordinal: 52000
 <!-- SECTION:NOTES:BEGIN -->
 实现与验证：① 基线 migrations/versions/0001_baseline.py 由 dictionary→metadata 生成（schema/表/hypertable/压缩 + mart.entity_latest_v1 视图与 entity_asof 函数），tests/test_platform_migrations.py 做漂移校验与回滚完备性检查；② 真实 PG17+TimescaleDB 集成（docker-compose.dev.yml）验证 upgrade→重复 upgrade→downgrade base→重复 downgrade→再 upgrade 全链路幂等，并补充读模型函数真实建函数冒烟；③ README 增加「本地数据库与迁移」章节，.env.example + .gitignore(.env) 保证凭证不入库。验证：327 单测 + 5 集成通过，ruff/mypy 全绿。
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @review
+created: 2026-09-14 11:02
+---
+评审修复（本分支）：① schema_sql/ensure_schema 补全全部 17 个业务索引并纳入基线（此前迁移漏索引起草）；② 迁移集成测试加 FDP_TEST_DATABASE=1 显式开关（防误 drop 非 dev 库），并断言索引落地；③ 脚手架路径校验 + FDP_ALEMBIC_INI/FDP_ALEMBIC_SCRIPT_LOCATION 覆盖；④ 写明基线冻结规则、修复语句字面量反斜杠转义。验证：328 单测 + 5 集成（含索引断言）+ ruff/mypy 全绿。
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

@@ -1,8 +1,29 @@
-# fin-data-hub
+# FinDataPlatform（金融数据平台）
 
-多源金融数据聚合库（Python）。用统一接口获取 Tushare / Wind / 同花顺 iFinD / AkShare 的行情、净值、指数与参考数据，并在库内统一标的代码、字段口径、并发安全与内存缓存。**本库不含持久化存储层**（不落库、不写文件）。
+个人金融数据平台：多源数据接入 → 归一化 → PIT 持久化 → 统一服务（SDK / REST / 管理台）。
 
-## 特性
+- **接入层 `fin_data_hub`**：多源聚合库（Tushare / Wind / 同花顺 iFinD / AkShare / Fuyao / BaoStock），统一代码、口径、限流与内存缓存；**v0 已可用**。
+- **平台层 `fin_data_platform`**：数据字典、引用注册表（Entity Graph）、TimescaleDB 存储、派生引擎、质量与调度、SDK/REST；**v1 建设中**。
+
+## 项目结构
+
+```
+src/fin_data_hub/        接入层库（v0，可用）
+src/fin_data_platform/   平台层（v1）：dictionary / registry / storage
+tests/                   单元测试与集成测试（-m integration）
+backlog/                 任务与设计文档（Backlog.md CLI 管理）
+```
+
+## 当前状态
+
+| 层 | 状态 |
+|---|---|
+| 接入层 `fin_data_hub` | ✅ v0 完成（多源适配器、Router 复权路由、对账、接口扩展） |
+| 平台层 `fin_data_platform` | 🚧 v1 建设中（字典 / 引用注册表 / 存储已落地；派生 / 质量 / 调度 / REST 进行中） |
+
+设计文档（Backlog）：`doc-10` 架构总纲、`doc-11` 数据字典规范、`doc-12` REST 契约、`doc-13` 存储策略、`doc-17` 数据库设计、`doc-18` 代码与标识标准、`doc-19` 数据目录。
+
+## 接入层特性（fin_data_hub）
 
 - **统一代码模型**：以 WindCode 风格 `symbol.VENUE` 作为标的主键（如 `600000.SH`、`000001.SZ`、`510300.SH`、`000001.OF`），各源代码差异由映射层收敛。
 - **统一接口 + 显式来源**：取数接口通过 `source` 参数明确数据来源，内部按 source 调度到对应适配器。
@@ -23,13 +44,14 @@ pip install "fin-data-hub[ifind]"     # 同花顺 iFinD（含 httpx）
 pip install "fin-data-hub[wind]"      # Wind（含 httpx）
 pip install "fin-data-hub[fuyao]"     # Fuyao 同花顺金融数据API（含 httpx）
 pip install "fin-data-hub[baostock]"  # BaoStock 免费源
+pip install "fin-data-hub[platform]"  # 平台层（pydantic / pyyaml / sqlalchemy）
 ```
 
 按需安装对应数据源的 extras；不使用某源时无需安装其依赖。核心依赖仅 `pandas`。iFinD / Wind 通过厂商远端 MCP（HTTP JSON-RPC）接入，**不需要安装 WindPy / iFinDPy**。
 
 版本：`fin_data_hub.__version__`（单一来源 `src/fin_data_hub/_version.py`，`pyproject.toml` 动态读取）。
 
-## 快速开始
+## 接入层快速开始（fin_data_hub）
 
 ```python
 from fin_data_hub import FinDataHub, HubConfig, Source
@@ -173,10 +195,10 @@ config = HubConfig(
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -e ".[dev,tushare,akshare,ifind,wind]"
+.venv/bin/python -m pip install -e ".[dev,tushare,akshare,ifind,wind,platform]"
 
 .venv/bin/python -m pytest              # 离线单测（默认跳过 integration）
-.venv/bin/python -m pytest -m integration   # 端到端测试，需真实凭证
+.venv/bin/python -m pytest -m integration   # 端到端测试（需真实凭证；存储集成另需数据库）
 .venv/bin/python -m ruff check .
 .venv/bin/python -m mypy
 ```
@@ -188,7 +210,9 @@ python3 -m venv .venv
 - `FIN_DATA_HUB_IFIND_TOKEN`
 - `FIN_DATA_HUB_FUYAO_API_KEY`
 
-架构设计见仓库 Backlog 文档 `doc-1`（`backlog doc view doc-1`）。
+存储集成测试（`tests/test_integration_storage.py`）读取 `DATABASE_HOST / DATABASE_PORT / DATABASE_USER / DATABASE_PASSWORD`（`DATABASE_NAME` 可选，默认 `fin_data_platform`）；地址变动时可用 `FDP_DATABASE_HOST` 覆盖。
+
+架构与设计文档见 `doc-10` ~ `doc-19`（如 `backlog doc view doc-10`）。
 
 ## 许可证
 

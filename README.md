@@ -1,6 +1,13 @@
 # FinDataPlatform（金融数据基础设施）
 
-金融数据基础设施（Financial Data Infrastructure）：数据字典为契约、实体注册表为身份、PIT 存储为底座、派生引擎为产线；对外提供语义版本化的只读数据出口（Read Model）。
+FinDataPlatform 是一个具备 **Point-In-Time（PIT）语义**的金融数据底座，解决：
+
+- **多源数据统一**：canonical 代码、字段与口径统一，源差异在接入层收敛；
+- **历史可回溯（As-Of）**：事件时间与知识时间双轴，任意时点可复现当时可见的数据；
+- **数据重述（Restatement）**：公告修正 / 财务重述以新版本追加，不改写历史；
+- **实体身份管理**：Entity Graph（issuer / listing / 关系 / 外部标识）与 PIT Universe；
+- **派生指标治理**：算法登记与派生口径可追溯（Derived Engine）；
+- **统一数据出口**：语义版本化的 Read Model，供研究、回测与下游系统消费。
 
 ```
 多源金融数据 → Canonical Schema → PIT Storage → Derived Data → Read Model → 消费层（SDK / REST / Export / …）
@@ -10,7 +17,7 @@
 
 ## 系统架构
 
-平台不是应用后端，而是数据基础设施：Dictionary / Entity Registry / Storage / Derived Engine 四大件构成平台主体，REST 与 SDK 只是末端消费适配器（设计见 `doc-10`）。
+平台不是应用后端，而是数据基础设施（与 Iceberg / Delta Lake 类似：元数据、存储与快照语义才是主体，API 只是入口）。
 
 ```
                  ┌──────────────┐
@@ -35,13 +42,18 @@
       SDK            REST           Export      (MCP…)
 ```
 
+分层职责：
+
+- **Platform Core（平台主体）**：Dictionary（数据契约）· Entity Registry（实体身份）· Storage（PIT 存储）· Derived Engine（派生治理）——平台语义与壁垒都在这一层；
+- **Consumption Adapter（消费适配器）**：SDK · REST · Export · MCP——可选入口，不承载平台语义，也不是平台主体。
+
 按现代数据平台的三平面理解：
 
 - **Control Plane（`meta`）**：数据集注册、任务运行、watermark、质量结果、数据代次、算法注册与重述台账（`doc-13` §1）；
 - **Data Plane**：`raw`（源端原始）→ Canonical（按域的标准化表 + PIT 字段）→ `mart`（Read Model）；
-- **Consumption Plane**：SDK / REST / 批量导出 / 未来 MCP——只读适配器，不改变数据语义，也不构成平台核心。
+- **Consumption Plane**：SDK / REST / 批量导出 / 未来 MCP——只读适配器，不改变数据语义。
 
-### 平台四大件
+### Platform Core（平台四大件）
 
 - **数据字典（Dictionary）**：机读契约（字段 / 类型 / 单位 / PIT 角色 / 质量规则 / 血缘 / 映射）；schema、迁移与文档由字典生成或强校验（Schema First，`doc-11`）。
 - **实体注册表（Entity Registry）**：Entity Graph——实体身份与分类面、代码履历、关系（词表驱动双向查询）、外部标识；交易状态归数据集，PIT Universe 由数据集推导（`doc-10` §3.3）。
@@ -72,7 +84,7 @@
 - **迁移**：Alembic 版本化；基线由数据字典生成（含 hypertable / 压缩 / 读模型），`upgrade()` / `downgrade()` 幂等可重复。
 - 自动生成文档：表 / 字段 / 依赖（`doc-17`）、数据目录（`doc-19`）。
 
-### 消费方式
+### Consumption Adapter（消费适配器）
 
 平台提供多种只读出口（建设中），SDK/REST 只是其中两种适配器：
 
@@ -90,7 +102,7 @@
 - `fin_data_platform.storage`：按字典生成 schema、幂等写入、as-of / latest 读取、实体读模型；
 - `fin_data_platform.storage.migrations`：Alembic 升级 / 回滚。
 
-当前部署现状：`docker-compose.dev.yml` 只运行**开发用 TimescaleDB（PostgreSQL 17）数据库**；平台核心（字典 / 注册表 / 存储 / 迁移）以 Python 库与数据库形态完整可用，**不依赖常驻 Backend**。
+当前平台核心能力（Dictionary / Registry / Storage / Migration）可作为**纯库**运行，不依赖常驻服务进程；REST / MCP / 调度器属于**可选**的消费或运维组件。目前 `docker-compose.dev.yml` 只运行开发用 TimescaleDB（PostgreSQL 17）数据库。
 
 ## 当前状态
 

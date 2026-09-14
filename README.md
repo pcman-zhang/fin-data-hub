@@ -49,7 +49,7 @@ FinDataPlatform 是一个具备 **Point-In-Time（PIT）语义**的金融数据�
 
 按现代数据平台的三平面理解：
 
-- **Control Plane（`meta`）**：数据集注册、任务运行、watermark、质量结果、数据代次、算法注册与重述台账（`doc-13` §1）；
+- **Control Plane（`meta` + FinDataRuntime）**：数据集注册、任务运行、watermark、质量结果、数据代次、算法注册与重述台账（`doc-13` §1）；由常驻控制面进程 **FinDataRuntime** 承载（`doc-20`）；
 - **Data Plane**：`raw`（源端原始）→ Canonical（按域的标准化表 + PIT 字段）→ `mart`（Read Model）；
 - **Consumption Plane**：SDK / REST / 批量导出 / 未来 MCP——只读适配器，不改变数据语义。
 
@@ -102,7 +102,7 @@ FinDataPlatform 是一个具备 **Point-In-Time（PIT）语义**的金融数据�
 - `fin_data_platform.storage`：按字典生成 schema、幂等写入、as-of / latest 读取、实体读模型；
 - `fin_data_platform.storage.migrations`：Alembic 升级 / 回滚。
 
-当前平台核心能力（Dictionary / Registry / Storage / Migration）可作为**纯库**运行，不依赖常驻服务进程；REST / MCP / 调度器属于**可选**的消费或运维组件。目前 `docker-compose.dev.yml` 只运行开发用 TimescaleDB（PostgreSQL 17）数据库。
+平台核心能力（Dictionary / Registry / Storage / Migration）可作为**纯库**运行；采集、派生与读模型构建等自动化由 **FinDataRuntime**（控制面常驻进程，`doc-20`）执行，REST / MCP 属可选的消费适配器。目前 `docker-compose.dev.yml` 只运行开发用 TimescaleDB（PostgreSQL 17）数据库。
 
 ## 边界与路线图
 
@@ -123,6 +123,7 @@ FinDataPlatform 是一个具备 **Point-In-Time（PIT）语义**的金融数据�
 | 实体注册表 Entity Graph（身份 / 关系 / 外部标识 / PIT Universe） | ✅ 已落地（`doc-10` §3.3） |
 | PIT 存储（schema 生成 / 幂等写入 / as-of 读取 / 实体读模型） | ✅ 已落地（`doc-13`） |
 | 版本化迁移（Alembic，字典生成基线） | ✅ 已落地 |
+| FinDataRuntime（控制面：Scheduler / Dispatcher / WorkerPool + `meta.*`） | ✅ 骨架已落地（`doc-20`；调度 / 派生执行随 TASK-3.6 / 3.12 挂载） |
 | 数据源接入 FinDataHub（多源适配 / Router / 限流 / 缓存 / 计量） | ✅ 可用 |
 | 派生引擎 / 时序查询能力 | 🚧 建设中（TASK-3.12 / 3.13） |
 | Control Plane（`meta`：质量 / 调度 / 代次 / 算法台账） | 🚧 建设中（TASK-3.5 / 3.6 / 3.12） |

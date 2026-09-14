@@ -3,7 +3,7 @@ id: doc-20
 title: FinDataRuntime：控制面 Runtime 与任务模型
 type: specification
 created_date: '2026-09-14 11:54'
-updated_date: '2026-09-14 12:25'
+updated_date: '2026-09-14 12:43'
 ---
 # FinDataRuntime：控制面 Runtime 与任务模型
 
@@ -252,7 +252,7 @@ APScheduler 采用 **PostgreSQL job store** 持久化调度注册（重启不丢
 
 | 事项 | 任务 |
 |---|---|
-| Runtime 骨架（角色分层入口 / Job + 依赖框架 / 健康检查 / 迁移校验） | 新增任务（建议 TASK-3.18，前置） |
+| Runtime 骨架（角色分层入口 / Job + 依赖框架 / 健康检查 / 迁移校验） | TASK-3.18（骨架已落地；调度 / 派生执行随 3.6 / 3.12 挂载） |
 | 调度与增量同步 | TASK-3.6（依赖 Runtime 骨架） |
 | 导入通道 | TASK-3.3.2 |
 | 质量执行 | TASK-3.5 |

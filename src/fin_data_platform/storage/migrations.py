@@ -15,6 +15,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import Engine
 
 from fin_data_platform.storage.config import StorageConfig
 from fin_data_platform.storage.read_models import (
@@ -34,10 +35,14 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 BASELINE_REVISION = "0001_baseline"
 BASELINE_PATH = REPO_ROOT / "migrations" / "versions" / f"{BASELINE_REVISION}.py"
 
+#: 修订 0002：Runtime 控制面（meta.*）；基线冻结后增量一律走新修订
+RUNTIME_META_REVISION = "0002_runtime_meta"
+RUNTIME_META_PATH = REPO_ROOT / "migrations" / "versions" / f"{RUNTIME_META_REVISION}.py"
+
 
 def baseline_statements() -> tuple[list[str], list[str]]:
-    """返回基线 ``(upgrade, downgrade)`` DDL 清单（由当前数据字典与读模型生成）。"""
-    metadata, specs = build_metadata()
+    """返回基线 ``(upgrade, downgrade)`` DDL 清单（字典 + ref；不含 meta）。"""
+    metadata, specs = build_metadata(include_runtime=False)
     upgrade = [
         f"CREATE SCHEMA IF NOT EXISTS {MART_SCHEMA}",
         *schema_sql(metadata, dialect="postgresql", if_not_exists=True),
@@ -125,6 +130,89 @@ def write_baseline(path: Path | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_baseline_script(), encoding="utf-8")
     return target
+
+
+# ---------------------------------------------------------------- 修订 0002（meta.*）
+def runtime_meta_statements() -> tuple[list[str], list[str]]:
+    """返回 Runtime 控制面（``meta.*``）的 ``(upgrade, downgrade)`` DDL 清单。"""
+    from fin_data_platform.runtime.schema import metadata as runtime_metadata
+
+    upgrade = schema_sql(runtime_metadata, dialect="postgresql", if_not_exists=True)
+    downgrade = [
+        f"DROP TABLE IF EXISTS {table.key};"
+        for table in reversed(runtime_metadata.sorted_tables)
+    ]
+    return upgrade, downgrade
+
+
+def render_runtime_meta_revision() -> str:
+    """渲染修订 0002 源码（由 ``runtime/schema.py`` 生成，请勿手改）。"""
+    upgrade, downgrade = runtime_meta_statements()
+    lines = [
+        '"""Runtime 控制面 schema（meta.*；doc-20）。由 runtime/schema.py 生成，请勿手改。',
+        "",
+        "重新生成：``write_runtime_meta_revision()``；漂移校验：``tests/test_platform_migrations.py``。",
+        "",
+        "Revision ID: 0002_runtime_meta",
+        "Revises: 0001_baseline",
+        '"""',
+        "",
+        "from __future__ import annotations",
+        "",
+        "from alembic import op",
+        "",
+        'revision = "0002_runtime_meta"',
+        'down_revision = "0001_baseline"',
+        "branch_labels = None",
+        "depends_on = None",
+        "",
+        "",
+        "UPGRADE_STATEMENTS = [",
+        *_statement_literals(upgrade),
+        "]",
+        "",
+        "",
+        "DOWNGRADE_STATEMENTS = [",
+        *_statement_literals(downgrade),
+        "]",
+        "",
+        "",
+        "def upgrade() -> None:",
+        "    for statement in UPGRADE_STATEMENTS:",
+        "        op.execute(statement)",
+        "",
+        "",
+        "def downgrade() -> None:",
+        "    for statement in DOWNGRADE_STATEMENTS:",
+        "        op.execute(statement)",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def write_runtime_meta_revision(path: Path | None = None) -> Path:
+    """写入/刷新修订 0002（开发者操作；CI 校验生成结果与文件一致）。"""
+    target = path or RUNTIME_META_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_runtime_meta_revision(), encoding="utf-8")
+    return target
+
+
+# ---------------------------------------------------------------- 版本查询
+def expected_head_revision(dsn: str | None = None) -> str | None:
+    """迁移脚本目录中的 head 修订（不连库）。"""
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(alembic_config(dsn))
+    return script.get_current_head()
+
+
+def current_revision(engine: Engine) -> str | None:
+    """数据库当前修订（无版本表返回 ``None``）。"""
+    from alembic.runtime.migration import MigrationContext
+
+    with engine.connect() as connection:
+        return MigrationContext.configure(connection).get_current_revision()
 
 
 def _resolve_dsn(dsn: str | None) -> str:

@@ -1,12 +1,17 @@
-"""迁移（TASK-3.3.1）单元测试：基线 DDL 与字典一致（漂移校验）与回滚完备。"""
+"""迁移（TASK-3.3.1 / 3.18）单元测试：基线 + 修订 0002 与 schema 一致（漂移校验）。"""
 
 from __future__ import annotations
 
+from fin_data_platform.runtime.schema import TABLES as META_TABLES
 from fin_data_platform.storage.migrations import (
     BASELINE_PATH,
+    RUNTIME_META_PATH,
     alembic_config,
     baseline_statements,
+    expected_head_revision,
     render_baseline_script,
+    render_runtime_meta_revision,
+    runtime_meta_statements,
 )
 from fin_data_platform.storage.schema import build_metadata
 
@@ -33,11 +38,13 @@ def test_baseline_upgrade_covers_schemas_tables_hypertables_and_read_models() ->
     assert "CREATE INDEX IF NOT EXISTS ix_daily_bar_business" in joined
     assert "CREATE OR REPLACE VIEW mart.entity_latest_v1" in joined
     assert "CREATE OR REPLACE FUNCTION mart.entity_asof(as_of timestamptz)" in joined
+    # 基线冻结：meta 控制面表不在 0001（由修订 0002 创建）
+    assert "meta.job_runs" not in joined
 
 
 def test_baseline_covers_every_metadata_index() -> None:
     """doc-13 §4/§9：字典/ref 手写表的业务索引必须随基线落地。"""
-    metadata, _ = build_metadata()
+    metadata, _ = build_metadata(include_runtime=False)
     upgrade, _ = baseline_statements()
     joined = "\n".join(upgrade)
     indexes = [
@@ -52,7 +59,7 @@ def test_baseline_covers_every_metadata_index() -> None:
 
 
 def test_baseline_downgrade_drops_read_models_then_tables() -> None:
-    metadata, _ = build_metadata()
+    metadata, _ = build_metadata(include_runtime=False)
     _, downgrade = baseline_statements()
     # 先删依赖 ref.entity 的读模型，再删基表（否则 DROP TABLE 被依赖阻塞）
     assert downgrade[:2] == [
@@ -66,6 +73,33 @@ def test_baseline_downgrade_drops_read_models_then_tables() -> None:
         for statement in table_drops
     }
     assert dropped == set(metadata.tables)
+
+
+def test_runtime_meta_revision_matches_schema() -> None:
+    """修订 0002 漂移校验：meta schema 变更后必须重新生成 0002。"""
+    assert RUNTIME_META_PATH.read_text(encoding="utf-8") == render_runtime_meta_revision()
+
+
+def test_runtime_meta_revision_covers_all_tables() -> None:
+    upgrade, downgrade = runtime_meta_statements()
+    joined = "\n".join(upgrade)
+    assert "CREATE SCHEMA IF NOT EXISTS meta" in joined
+    dropped = {
+        statement.removeprefix("DROP TABLE IF EXISTS ").removesuffix(";")
+        for statement in downgrade
+    }
+    assert dropped == {table.key for table in META_TABLES}
+    for table in META_TABLES:
+        assert f"CREATE TABLE IF NOT EXISTS {table.key}" in joined
+        for index in table.indexes:
+            assert f"CREATE INDEX IF NOT EXISTS {index.name} ON" in joined
+
+
+def test_expected_head_is_runtime_meta() -> None:
+    assert (
+        expected_head_revision("postgresql+psycopg://u:p@localhost:5432/db")
+        == "0002_runtime_meta"
+    )
 
 
 def test_alembic_config_escapes_dsn_interpolation() -> None:

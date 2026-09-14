@@ -30,7 +30,7 @@ def engine():
         connect_args={"check_same_thread": False},
     )
     with engine.begin() as connection:
-        for schema in ("cn_equity", "cn_fund", "ref"):
+        for schema in ("cn_equity", "cn_fund", "ref", "meta"):
             connection.execute(text(f"ATTACH DATABASE ':memory:' AS {schema}"))
     return engine
 
@@ -128,6 +128,15 @@ def test_ensure_schema_and_idempotent_append(engine) -> None:
     assert count == 1
 
 
+def test_metadata_includes_runtime_meta_tables() -> None:
+    metadata, _ = build_metadata()
+    assert "meta.job_runs" in metadata.tables
+    assert "meta.job_dependencies" in metadata.tables
+    # 基线（0001）不含 meta：由修订 0002 创建
+    baseline_metadata, _ = build_metadata(include_runtime=False)
+    assert "meta.job_runs" not in baseline_metadata.tables
+
+
 def test_database_document_generated() -> None:
     from fin_data_platform.storage.report import database_markdown
 
@@ -143,6 +152,10 @@ def test_database_document_generated() -> None:
         "ref.entity_relation",
         "ref.entity_external_id",
         "ref.relation_type_dict",
+        "meta.job_defs",
+        "meta.job_dependencies",
+        "meta.job_runs",
+        "meta.watermarks",
     ):
         assert f"`{key}`" in document
     assert "## 1. 表清单与作用" in document

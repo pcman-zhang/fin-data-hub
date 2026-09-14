@@ -19,6 +19,10 @@ _REF_TABLES = {
     "ref.entity_relation": "实体关系（单向存储；inverse 词表驱动双向查询）",
     "ref.entity_external_id": "实体外部标识（isin/figi/cusip/sedol/lei/uscc）",
     "ref.relation_type_dict": "关系词表（关系类型登记）",
+    "meta.job_defs": "Runtime 任务定义镜像（声明式注册；doc-20）",
+    "meta.job_dependencies": "任务依赖与触发条件（parent_job / child_job / condition）",
+    "meta.job_runs": "任务运行记录与状态机（Runtime 状态权威）",
+    "meta.watermarks": "数据集 / 分区水位",
 }
 
 #: 逻辑引用 ref.entity 的字段名（issuer_id 指发行主体）

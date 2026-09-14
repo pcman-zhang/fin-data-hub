@@ -1,0 +1,25 @@
+# 本地开发/集成测试数据库（TASK-3.3.1）。
+# 凭证经 .env 注入（不落仓库）：
+#   cp .env.example .env  # 填写 POSTGRES_PASSWORD / DATABASE_*
+#   docker compose -f docker-compose.dev.yml up -d
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fdp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD（参考 .env.example）}
+      POSTGRES_DB: ${POSTGRES_DB:-fin_data_platform}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-fdp} -d ${POSTGRES_DB:-fin_data_platform}
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  timescaledb-data:

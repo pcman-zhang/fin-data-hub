@@ -210,7 +210,26 @@ python3 -m venv .venv
 - `FIN_DATA_HUB_IFIND_TOKEN`
 - `FIN_DATA_HUB_FUYAO_API_KEY`
 
-存储集成测试（`tests/test_integration_storage.py`）读取 `DATABASE_HOST / DATABASE_PORT / DATABASE_USER / DATABASE_PASSWORD`（`DATABASE_NAME` 可选，默认 `fin_data_platform`）；地址变动时可用 `FDP_DATABASE_HOST` 覆盖。
+存储集成测试（`tests/test_integration_storage.py`、`tests/test_integration_migrations.py`）读取 `DATABASE_HOST / DATABASE_PORT / DATABASE_USER / DATABASE_PASSWORD`（`DATABASE_NAME` 可选，默认 `fin_data_platform`）；地址变动时可用 `FDP_DATABASE_HOST` 覆盖。
+
+### 本地数据库与迁移（TASK-3.3）
+
+```bash
+cp .env.example .env          # 填写密码（.env 不入库）
+docker compose -f docker-compose.dev.yml up -d   # PostgreSQL 17 + TimescaleDB
+export $(grep -v '^#' .env | xargs)              # 或手动 export DATABASE_*
+
+# 版本化迁移（Alembic；基线由数据字典生成）
+.venv/bin/python -c "from fin_data_platform.storage.migrations import upgrade; upgrade()"
+# 回滚：downgrade()（等价 alembic downgrade base）
+
+# 集成验证（真实 PG）：FDP_TEST_DATABASE=1 显式开启破坏性迁移测试
+# 注意：tests/test_integration_migrations.py 会 DROP 目标库全部项目表，务必指向 dev 库
+FDP_TEST_DATABASE=1 .venv/bin/python -m pytest -m integration
+```
+
+基线迁移文件 `migrations/versions/0001_baseline.py` 由字典生成（`write_baseline()`），
+字典变更后需重新生成；CI 漂移校验见 `tests/test_platform_migrations.py`。
 
 架构与设计文档见 `doc-10` ~ `doc-19`（如 `backlog doc view doc-10`）。
 

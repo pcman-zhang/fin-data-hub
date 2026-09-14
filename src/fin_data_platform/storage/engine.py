@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import Engine, create_engine, text
-from sqlalchemy.schema import CreateSchema, CreateTable
+from sqlalchemy.schema import CreateIndex, CreateSchema, CreateTable
 
 from fin_data_platform.storage.config import StorageConfig
 from fin_data_platform.storage.schema import build_metadata, timescale_statements
@@ -47,6 +47,9 @@ def ensure_schema(
         for table in metadata.sorted_tables:
             connection.execute(CreateTable(table, if_not_exists=True))
             executed.append(f"CREATE TABLE IF NOT EXISTS {table.key}")
+            for index in sorted(table.indexes, key=lambda item: item.name or ""):
+                connection.execute(CreateIndex(index, if_not_exists=True))
+                executed.append(f"CREATE INDEX IF NOT EXISTS {index.name}")
         if (
             config is not None
             and config.timescale

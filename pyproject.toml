@@ -21,7 +21,13 @@ ifind = ["httpx>=0.27"]
 wind = ["httpx>=0.27"]
 fuyao = ["httpx>=0.27"]
 baostock = ["baostock>=0.8"]
-platform = ["pydantic>=2.7", "pyyaml>=6.0", "sqlalchemy>=2.0"]
+platform = [
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
@@ -31,6 +37,8 @@ dev = [
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
 ]
 
 [tool.setuptools.dynamic]
@@ -63,6 +71,10 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# 生成的迁移文件：DDL 语句为单行字面量（含 Timescale 参数），不折行
+"migrations/versions/*.py" = ["E501"]
 
 [tool.mypy]
 packages = ["fin_data_hub", "fin_data_platform"]

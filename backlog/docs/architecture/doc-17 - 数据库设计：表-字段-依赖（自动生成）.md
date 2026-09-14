@@ -3,7 +3,7 @@ id: doc-17
 title: 数据库设计：表 / 字段 / 依赖（自动生成）
 type: specification
 created_date: '2026-09-13 14:07'
-updated_date: '2026-09-14 08:18'
+updated_date: '2026-09-14 12:50'
 ---
 # 数据库设计：表 / 字段 / 依赖（自动生成）
 
@@ -21,6 +21,10 @@ updated_date: '2026-09-14 08:18'
 | `cn_equity.listing_lifecycle` | 交易状态（上市/暂停/退市）；PIT Universe 权威来源，替代注册表交易状态 | entity_id, start_date, knowledge_time, version | none |
 | `cn_equity.market_events_namechange` | 名称变更历史（生效闭区间 + 公告日；用于 as-of 属性还原） | entity_id, start_date, knowledge_time, version | none |
 | `cn_fund.nav` | 场外基金净值（单位净值/累计净值；日频） | entity_id, date, knowledge_time, version | event_time |
+| `meta.job_defs` | Runtime 任务定义镜像（声明式注册；doc-20） | job_id | — |
+| `meta.job_dependencies` | 任务依赖与触发条件（parent_job / child_job / condition） | parent_job, child_job | — |
+| `meta.job_runs` | 任务运行记录与状态机（Runtime 状态权威） | run_id | — |
+| `meta.watermarks` | 数据集 / 分区水位 | dataset, scope | — |
 | `ref.entity` | 引用注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket） | entity_id, valid_from, knowledge_time, version | none |
 | `ref.entity_code_history` | canonical 代码履历（代码变更/复用 → 旧码仍可解析；替代多源别名表） | entity_id, code, valid_from, knowledge_time, version | none |
 | `ref.entity_external_id` | 实体外部标识（isin/figi/cusip/sedol/lei/uscc；不含 ticker） | entity_id, id_type, id_value, valid_from, knowledge_time, version | none |
@@ -150,6 +154,63 @@ updated_date: '2026-09-14 08:18'
 | `version` | `BIGINT` | 否 |  | none | 同业务键版本号 |
 | `provider` | `VARCHAR(32)` | 否 |  | none | 数据来源 |
 
+### `meta.job_defs`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `job_id` | `VARCHAR(64)` | 否 |  |  |  |
+| `kind` | `VARCHAR(16)` | 否 |  |  |  |
+| `dataset` | `VARCHAR(64)` | 否 |  |  |  |
+| `schedule` | `VARCHAR(64)` | 是 |  |  |  |
+| `priority` | `INTEGER` | 否 |  |  |  |
+| `max_attempts` | `INTEGER` | 否 |  |  |  |
+| `enabled` | `BOOLEAN` | 否 |  |  |  |
+| `updated_at` | `DATETIME` | 否 |  |  |  |
+
+### `meta.job_dependencies`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `parent_job` | `VARCHAR(64)` | 否 |  |  |  |
+| `child_job` | `VARCHAR(64)` | 否 |  |  |  |
+| `condition` | `VARCHAR(16)` | 否 |  |  |  |
+| `updated_at` | `DATETIME` | 否 |  |  |  |
+
+### `meta.job_runs`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `run_id` | `INTEGER` | 否 |  |  |  |
+| `job_key` | `VARCHAR(64)` | 否 |  |  |  |
+| `job_id` | `VARCHAR(64)` | 否 |  |  |  |
+| `kind` | `VARCHAR(16)` | 否 |  |  |  |
+| `dataset` | `VARCHAR(64)` | 否 |  |  |  |
+| `scope` | `VARCHAR(64)` | 否 |  |  |  |
+| `window_start` | `DATE` | 是 |  |  |  |
+| `window_end` | `DATE` | 是 |  |  |  |
+| `version_dimension` | `VARCHAR(64)` | 是 |  |  |  |
+| `status` | `VARCHAR(16)` | 否 |  |  |  |
+| `attempt` | `INTEGER` | 否 |  |  |  |
+| `max_attempts` | `INTEGER` | 否 |  |  |  |
+| `priority` | `INTEGER` | 否 |  |  |  |
+| `scheduled_at` | `DATETIME` | 否 |  |  |  |
+| `started_at` | `DATETIME` | 是 |  |  |  |
+| `finished_at` | `DATETIME` | 是 |  |  |  |
+| `rows_written` | `BIGINT` | 是 |  |  |  |
+| `error` | `TEXT` | 是 |  |  |  |
+| `request_id` | `VARCHAR(64)` | 是 |  |  |  |
+| `worker` | `VARCHAR(64)` | 是 |  |  |  |
+| `updated_at` | `DATETIME` | 否 |  |  |  |
+
+### `meta.watermarks`
+
+| 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
+|---|---|---|---|---|---|
+| `dataset` | `VARCHAR(64)` | 否 |  |  |  |
+| `scope` | `VARCHAR(64)` | 否 |  |  |  |
+| `watermark_time` | `DATETIME` | 是 |  |  |  |
+| `updated_at` | `DATETIME` | 否 |  |  |  |
+
 ### `ref.entity`
 
 | 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
@@ -235,6 +296,10 @@ updated_date: '2026-09-14 08:18'
 - `cn_equity.listing_lifecycle` ← ref.entity（entity_id/issuer_id 逻辑引用）
 - `cn_equity.market_events_namechange` ← ref.entity（entity_id/issuer_id 逻辑引用）
 - `cn_fund.nav` ← ref.entity（entity_id/issuer_id 逻辑引用）
+- `meta.job_defs` ← —（源数据）
+- `meta.job_dependencies` ← —（源数据）
+- `meta.job_runs` ← —（源数据）
+- `meta.watermarks` ← —（源数据）
 - `ref.entity` ← —（源数据）
 - `ref.entity_code_history` ← ref.entity（entity_id/issuer_id 逻辑引用）；ref.entity（血缘）
 - `ref.entity_external_id` ← ref.entity（entity_id/issuer_id 逻辑引用）；ref.entity（血缘）

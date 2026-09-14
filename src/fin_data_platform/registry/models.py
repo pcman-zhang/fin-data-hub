@@ -132,6 +132,10 @@ class RelationTypeRecord:
     relation_type: str
     inverse_relation: str
     description: str = ""
+    valid_from: date | None = None
+    valid_to: date | None = None
+    knowledge_time: datetime | None = None
+    version: int = 1
 
 
 @dataclass(frozen=True, slots=True)

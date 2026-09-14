@@ -90,8 +90,12 @@ relation_type_dict = Table(
     "relation_type_dict",
     metadata,
     Column("relation_type", String(32), primary_key=True),
+    Column("valid_from", Date, primary_key=True),
+    Column("knowledge_time", DateTime(timezone=True), primary_key=True),
+    Column("version", BigInteger, primary_key=True),
     Column("inverse_relation", String(32), nullable=False),
     Column("description", String(128), nullable=False),
+    Column("valid_to", Date),
     schema=SCHEMA,
 )
 

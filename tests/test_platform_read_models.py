@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from fin_data_platform.registry.schema import entity
 from fin_data_platform.storage import (
+    ensure_entity_read_models,
     entity_asof_function_sql,
     entity_asof_query,
     entity_latest_view_sql,
@@ -77,18 +78,14 @@ def _rows() -> list[dict]:
 
 
 def test_entity_latest_view_semantics(engine) -> None:
-    # SQLite 视图不可跨 attached schema，故在 main 中建同名表与视图验证 SQL 语义
+    # SQLite 视图不可跨 attached schema：ensure 在 SQLite 下按 main 建视图
     local = entity.to_metadata(MetaData(), schema=None)
     local.create(engine)
     with engine.begin() as connection:
         connection.execute(insert(local), _rows())
-        connection.execute(
-            text(
-                entity_latest_view_sql(
-                    mart_schema="main", ref_schema="main", dialect="sqlite"
-                )
-            )
-        )
+    executed = ensure_entity_read_models(engine)
+    assert any("entity_latest_v1" in statement for statement in executed)
+    with engine.begin() as connection:
         rows = connection.execute(
             text(
                 "SELECT entity_id, name, version FROM main.entity_latest_v1 "
@@ -99,6 +96,18 @@ def test_entity_latest_view_semantics(engine) -> None:
         (1, "茅台股份", 2),
         (2, "300ETF", 2),
     ]
+
+
+def test_ensure_read_models_on_plain_sqlite() -> None:
+    # 未 ATTACH 任何 schema 的普通 SQLite 引擎不应报 unknown database
+    plain = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    entity.to_metadata(MetaData(), schema=None).create(plain)
+    executed = ensure_entity_read_models(plain)
+    assert any("CREATE VIEW main.entity_latest_v1" in statement for statement in executed)
 
 
 def test_entity_asof_query_knowledge_and_validity(engine) -> None:
@@ -128,6 +137,8 @@ def test_entity_read_model_ddl_contract() -> None:
     assert "CREATE OR REPLACE FUNCTION mart.entity_asof(as_of timestamptz)" in function
     assert "RETURNS TABLE" in function
     assert "as_of::date" in function
+    # 列引用限定子查询，避免与 RETURNS TABLE 输出参数同名歧义
+    assert "SELECT ranked.entity_id, ranked.entity_type" in function
     # 非 PG 方言仅生成视图
     assert entity_read_model_statements(dialect="sqlite") == [
         entity_latest_view_sql(dialect="sqlite")

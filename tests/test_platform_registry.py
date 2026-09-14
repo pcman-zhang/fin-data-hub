@@ -254,6 +254,32 @@ def test_universe_filters() -> None:
         universe(registry, lifecycle, None)
 
 
+def test_universe_respects_knowledge_time() -> None:
+    registry = _registry()
+    maotai = registry.resolve("600519.SH")
+    assert maotai is not None
+    # 2026 年才录入的退市更正（knowledge=2026）不得影响 2020 年的 as-of
+    lifecycle = [
+        LifecycleRecord(entity_id=maotai, status="listed", start_date="2001-08-27"),
+        LifecycleRecord(
+            entity_id=maotai,
+            status="delisted",
+            start_date="2010-01-01",
+            knowledge_time="2026-01-01",
+            version=2,
+        ),
+    ]
+    # 2026 年才录入的退市更正（knowledge=2026）不得影响更正前的 as-of
+    assert [
+        item.code
+        for item in universe(registry, lifecycle, "2020-01-01", knowledge_as_of="2025-12-31")
+    ] == ["600519.SH"]
+    # 更正已知晓后，2020 年按更正后的状态判定（退市）
+    assert universe(registry, lifecycle, "2020-01-01", knowledge_as_of="2026-01-02") == []
+    # 未提供 knowledge_as_of 时假定调用方已预过滤：行直接参与判定
+    assert universe(registry, lifecycle, "2020-01-01") == []
+
+
 class FakeHub:
     def __init__(self) -> None:
         self._frames = {
@@ -327,10 +353,9 @@ def test_build_from_hub_classification() -> None:
     stats = registry.build_from_hub(
         FakeHub(), namechange_start="2000-01-01", namechange_end="2026-12-31"
     )
-    # 2 股票 + 1 ETF + 1 场外基金 + 1 LOF + 1 指数；退市列表不注册（交易状态归数据集）
-    assert stats.registered == 6
+    # 2 股票 + 1 ETF + 1 场外基金 + 1 LOF + 1 指数 + 1 退市身份（delist_list）
+    assert stats.registered == 7
     assert stats.attributes == 1
-    assert registry.resolve("000004.SZ") is None
 
     expected = {
         "600519.SH": ("equity", "cn"),
@@ -339,6 +364,8 @@ def test_build_from_hub_classification() -> None:
         "000001.OF": ("fund", "cn"),
         "161725.SZ": ("lof", "cn"),
         "000300.SH": ("index", "cn"),
+        # 退市标的保留实体身份（stock_basic 默认只返上市；身份供 listing_lifecycle 挂接）
+        "000004.SZ": ("equity", "cn"),
     }
     for code, (entity_type, market) in expected.items():
         entity_id = registry.resolve(code)
@@ -382,4 +409,4 @@ def test_schema_tables_defined() -> None:
         "version",
     }
     type_pk = {column.name for column in TABLES[4].primary_key}
-    assert type_pk == {"relation_type"}
+    assert type_pk == {"relation_type", "valid_from", "knowledge_time", "version"}

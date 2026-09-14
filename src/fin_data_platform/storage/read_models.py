@@ -40,6 +40,8 @@ ENTITY_COLUMNS: tuple[str, ...] = (
 )
 
 _ENTITY_SELECT = ", ".join(ENTITY_COLUMNS)
+#: 函数体内限定子查询列，避免与 RETURNS TABLE 输出参数同名歧义（PostgreSQL）
+_ENTITY_SELECT_RANKED = ", ".join(f"ranked.{name}" for name in ENTITY_COLUMNS)
 
 
 def entity_latest_view_sql(
@@ -78,7 +80,7 @@ def entity_asof_function_sql(
         "    valid_to date, knowledge_time timestamptz, version bigint\n"
         ")\n"
         "LANGUAGE sql STABLE AS $$\n"
-        f"    SELECT {_ENTITY_SELECT}\n"
+        f"    SELECT {_ENTITY_SELECT_RANKED}\n"
         "    FROM (\n"
         f"        SELECT e.{', e.'.join(ENTITY_COLUMNS)},\n"
         "               ROW_NUMBER() OVER (\n"
@@ -125,17 +127,29 @@ def entity_read_model_statements(*, dialect: str = "postgresql") -> list[str]:
     return statements
 
 
-def ensure_entity_read_models(engine: Engine) -> list[str]:
-    """创建 schema/视图/函数（幂等；返回已执行语句）。"""
-    statements = entity_read_model_statements(dialect=engine.dialect.name)
-    executed: list[str] = []
+def ensure_entity_read_models(
+    engine: Engine, *, mart_schema: str | None = None, ref_schema: str | None = None
+) -> list[str]:
+    """创建 schema/视图/函数（幂等；返回已执行语句）。
+
+    PostgreSQL 默认 ``mart``/``ref`` schema；SQLite（本地/测试）默认 ``main``
+    且仅支持视图（SQLite 视图不可跨 attached schema，函数不生成）。
+    """
     is_sqlite = engine.dialect.name == "sqlite"
+    mart = mart_schema or ("main" if is_sqlite else MART_SCHEMA)
+    ref = ref_schema or ("main" if is_sqlite else REF_SCHEMA)
+    statements = [
+        entity_latest_view_sql(mart_schema=mart, ref_schema=ref, dialect=engine.dialect.name)
+    ]
+    if not is_sqlite:
+        statements.append(entity_asof_function_sql(mart_schema=mart, ref_schema=ref))
+    executed: list[str] = []
     with engine.begin() as connection:
         if not is_sqlite:
-            connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {MART_SCHEMA}"))
-            executed.append(f"CREATE SCHEMA IF NOT EXISTS {MART_SCHEMA}")
+            connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {mart}"))
+            executed.append(f"CREATE SCHEMA IF NOT EXISTS {mart}")
         else:
-            connection.execute(text(f"DROP VIEW IF EXISTS {MART_SCHEMA}.entity_latest_v1"))
+            connection.execute(text(f"DROP VIEW IF EXISTS {mart}.entity_latest_v1"))
         for statement in statements:
             connection.execute(text(statement))
             executed.append(statement)

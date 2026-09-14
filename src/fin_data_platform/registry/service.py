@@ -639,9 +639,10 @@ class EntityRegistry:
         itype = _facet(id_type, IdType, "id_type", required=True)
         assert itype is not None
         target = to_date(as_of)
+        value = str(id_value).strip()
         matches = [
             row
-            for row in self._repo.find_external_ids(itype, str(id_value))
+            for row in self._repo.find_external_ids(itype, value)
             if covers(row, target)
         ]
         if not matches:
@@ -659,8 +660,10 @@ class EntityRegistry:
     ) -> BuildStats:
         """从 FinDataHub 基础信息构建/刷新身份（分类面 + 名称）。
 
-        交易状态（上市/停牌/退市）不在注册表：由 ``cn_equity.listing_lifecycle``
-        数据集承载，PIT Universe 见 :func:`fin_data_platform.registry.universe.universe`。
+        含退市标的身份（Tushare ``stock_basic`` 默认仅返回在市，退市标的自
+        ``delist_list`` 取得）：交易状态（上市/停牌/退市）不在注册表，由
+        ``cn_equity.listing_lifecycle`` 数据集承载，PIT Universe 见
+        :func:`fin_data_platform.registry.universe.universe`。
         """
         stats = BuildStats()
         for kind, entity_type in _KIND_ENTITY_TYPE.items():
@@ -670,6 +673,17 @@ class EntityRegistry:
                 continue
             stats = self._register_frame(
                 frame, kind=kind, entity_type=entity_type.value, stats=stats
+            )
+        try:
+            delisted = hub.get_reference("delist_list")
+        except (UnsupportedCapability, ValueError):
+            delisted = None
+        if delisted is not None and not delisted.empty:
+            stats = self._register_frame(
+                delisted,
+                kind="stock_list",
+                entity_type=EntityType.EQUITY.value,
+                stats=stats,
             )
         if namechange_start and namechange_end:
             try:

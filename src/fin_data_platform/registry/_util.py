@@ -50,6 +50,26 @@ def clean_code(value: Any) -> str | None:
     return text or None
 
 
+def to_datetime(value: Any) -> datetime | None:
+    """解析时间戳并统一为 naive（去时区）便于比较；无效输入返回 ``None``。"""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        return None
+    try:
+        parsed = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(parsed):
+        return None
+    if getattr(parsed, "tz", None) is not None:
+        parsed = parsed.tz_localize(None)
+    return parsed.to_pydatetime()
+
+
 def now() -> datetime:
     return datetime.now(UTC)
 

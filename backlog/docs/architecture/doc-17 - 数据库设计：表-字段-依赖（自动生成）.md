@@ -3,11 +3,11 @@ id: doc-17
 title: 数据库设计：表 / 字段 / 依赖（自动生成）
 type: specification
 created_date: '2026-09-13 14:07'
-updated_date: '2026-09-14 12:50'
+updated_date: '2026-09-14 14:22'
 ---
 # 数据库设计：表 / 字段 / 依赖（自动生成）
 
-> 由数据字典与 引用注册表 schema 生成（Schema First）；请勿手改，变更走字典。
+> 由数据字典与 实体注册表 schema 生成（Schema First）；请勿手改，变更走字典。
 
 ## 1. 表清单与作用
 
@@ -25,7 +25,7 @@ updated_date: '2026-09-14 12:50'
 | `meta.job_dependencies` | 任务依赖与触发条件（parent_job / child_job / condition） | parent_job, child_job | — |
 | `meta.job_runs` | 任务运行记录与状态机（Runtime 状态权威） | run_id | — |
 | `meta.watermarks` | 数据集 / 分区水位 | dataset, scope | — |
-| `ref.entity` | 引用注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket） | entity_id, valid_from, knowledge_time, version | none |
+| `ref.entity` | 实体注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket） | entity_id, valid_from, knowledge_time, version | none |
 | `ref.entity_code_history` | canonical 代码履历（代码变更/复用 → 旧码仍可解析；替代多源别名表） | entity_id, code, valid_from, knowledge_time, version | none |
 | `ref.entity_external_id` | 实体外部标识（isin/figi/cusip/sedol/lei/uscc；不含 ticker） | entity_id, id_type, id_value, valid_from, knowledge_time, version | none |
 | `ref.entity_relation` | 实体关系（单向存储；双向查询由 relation_type_dict.inverse_relation 驱动） | entity_id, related_id, relation_type, valid_from, knowledge_time, version | none |
@@ -49,7 +49,7 @@ updated_date: '2026-09-14 12:50'
 
 | 字段 | 类型 | 可空 | 单位 | PIT 角色 | 说明 |
 |---|---|---|---|---|---|
-| `entity_id` | `BIGINT` | 否 |  | none | 平台标的 ID（Security Master 主键） |
+| `entity_id` | `BIGINT` | 否 |  | none | 平台实体 ID（实体注册表主键） |
 | `trade_date` | `DATE` | 否 |  | event_time | 交易日 |
 | `open` | `DOUBLE` | 是 | 元 | none | 开盘价（不复权） |
 | `high` | `DOUBLE` | 是 | 元 | none | 最高价（不复权） |

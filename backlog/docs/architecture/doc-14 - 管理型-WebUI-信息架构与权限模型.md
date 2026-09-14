@@ -3,7 +3,7 @@ id: doc-14
 title: 管理型 WebUI 信息架构与权限模型
 type: specification
 created_date: '2026-09-13 12:46'
-updated_date: '2026-09-13 12:56'
+updated_date: '2026-09-14 14:23'
 ---
 # 管理型 WebUI 信息架构与权限模型
 
@@ -30,7 +30,7 @@ updated_date: '2026-09-13 12:56'
 | 5 | **新鲜度 / 水位** | 每数据集 watermark、lag、覆盖率趋势、SLA 违约清单（可下钻到任务） | `/v1/freshness` |
 | 6 | **血缘** | dataset 级 DAG（上游/下游、派生输出、`algorithm_id`）；点击跳数据集/算法 | `/v1/datasets/{dataset}`（lineage/derived） |
 | 7 | **派生与算法** | 算法注册表（id/version/owner/inputs/docstring Formula+PIT）；代次 `data_generation`；重算任务（**二次确认**） | `/v1/admin/derived*` |
-| 8 | **Security Master** | 标的检索（security_id / canonical / 源代码）；别名映射；状态与属性历史时间轴（含退市） | `/v1/securities/*` |
+| 8 | **实体注册表（Entity Registry）** | 实体检索（entity_id / canonical / 源代码）；代码履历与外部标识；状态与属性历史时间轴（含退市） | `/v1/entities/*` |
 | 9 | **快照与导出** | 研究快照列表（预留）、导出任务、下载 | `/v1/exports`、`/v1/snapshots/*` |
 | 10 | **系统与治理** | API Key 管理（REST 对外）、配额与成本、版本与健康 | `/v1/admin/*` |
 | 11 | **个人** | 会话、通知偏好；显示偏好 | 本地 |
@@ -56,7 +56,7 @@ updated_date: '2026-09-13 12:56'
 | 新鲜度面板 | `GET /v1/freshness` |
 | 任务详情/重试 | `GET /v1/admin/jobs/{id}`、`POST /v1/admin/jobs/{id}/retry` |
 | 算法注册表 | `GET /v1/admin/derived/algorithms` |
-| Security Master | `GET /v1/securities/{id}`、`/aliases` |
+| 实体注册表 | `GET /v1/entities/{entity_id}`、`/aliases` |
 
 ## 6. 决策与待评审项（2026-09-13）
 

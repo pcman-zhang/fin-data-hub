@@ -1,10 +1,10 @@
 ---
 id: TASK-3.14
-title: Security Master 落地：标的注册与多源代码映射
+title: Entity Registry（实体注册表）落地：标的注册与多源代码映射（原 Security Master）
 status: Done
 assignee: []
 created_date: '2026-09-13 12:16'
-updated_date: '2026-09-13 15:10'
+updated_date: '2026-09-14 14:23'
 labels: []
 milestone: m-0
 dependencies: []
@@ -15,7 +15,9 @@ ordinal: 50000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-按 doc-10 §3.3 落地平台基石：security_id 主键；security_alias（多源代码 + 有效期）；security_status_history（上市/暂停/退市）；security_attribute_history（名称/ST/类型 SCD2）；含退市永久保留；as-of 宇宙查询；DataPanel 强制挂载 security_id；从 FinDataHub 基础信息（stock/fund/etf/index + delist_list + namechange）构建与刷新；与 TASK-3.2 字典、TASK-3.3 存储联动。
+按 doc-10 §3.3 落地平台基石（**终态口径**，含后续 TASK-3.15 收敛）：`entity_id` 主键；`ref.entity`（SCD2：实体身份 / 分类面 / issuer 属性）；`ref.entity_code_history`（canonical 代码履历，旧码可解析）；交易状态不在注册表（由 `cn_equity.listing_lifecycle` 数据集承载，PIT Universe 由其推导）；从 FinDataHub 基础信息（stock/fund/etf/index + delist_list + namechange）构建与刷新；与 TASK-3.2 字典、TASK-3.3 存储联动。
+
+> 本描述按实施终态修订（2026-09-14，实体注册表命名统一）；原始方案（`security_id` / 4 表别名模型）与过程记录见 Implementation Plan / Notes。
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -29,6 +31,8 @@ ordinal: 50000
 
 <!-- SECTION:PLAN:BEGIN -->
 1. 领域模型（Security/Alias/Status/Attribute 区间）+ Repository 协议 + InMemory 实现；2. SecurityMaster 服务：security_id 分配、多源别名解析（含有效期）、as-of 宇宙（含退市）、SCD2 名称/状态还原；3. SQLAlchemy Core schema（4 表，迁移执行归 TASK-3.3）；4. Hub 构建入口（stock/fund/etf/index 列表 + delist_list + namechange）；5. 字典条目（ref.security_master/alias/status/attribute）；6. 测试 + 全量检查。
+
+（历史计划，命名与表方案已被后续重构替代；过程见 Notes）
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -42,6 +46,15 @@ ordinal: 50000
 
 代码评审修复（2026-09-13）：① 名称刷新失效（版本冲突）→ 版本号改为实体级单调 _next_version；② _current_row 优先 open 区间（当前行不再返回过期临时名称行）；③ add_name_change 改为完整 SCD2（闭合前段 + 临时区间 + 恢复行），消除"旧开区间复活"歧义；④ 退市路径保留同批新名称；⑤ BuildStats 改为 created/updated/skipped 互斥口径；⑥ 文案同步（引用注册表）。新增回归测试 3 项。
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-09-14 14:23
+---
+术语统一（2026-09-14）：标题与描述按 Entity Registry（实体注册表）终态修订；原始 Security Master 命名、4 表方案与过程记录保留于 Plan/Notes。代码侧同步：registry 各模块 docstring、dictionary/ref/entity.yaml、daily_bar.yaml 字段描述；doc-2/10/11/12/13/14/17/19 同步清扫；doc-17/19 已按字典重新生成。
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

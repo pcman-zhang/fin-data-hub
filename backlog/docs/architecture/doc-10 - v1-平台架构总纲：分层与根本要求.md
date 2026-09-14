@@ -3,12 +3,12 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-14 08:18'
+updated_date: '2026-09-14 14:23'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
 > 状态：评审中（第 2 稿） | 关联：doc-2（v1 规划）、doc-5（复权路由）、doc-6（API 契约）、doc-8（对账说明）、TASK-3.1
-> 第 2 稿变更：采纳评审意见——新增 DataPanel 精确定义（§3.1）、Raw→Canonical→Read Model 分层（§3.2）、**Security Master**（§3.3，与 PIT 同级）、Cache 非权威原则（§3.4）、**四时间模型**（§4.1）、**Schema First**（§6.1）；明确 Read Model 为 SDK/REST 唯一读取入口。
+> 第 2 稿变更：采纳评审意见——新增 DataPanel 精确定义（§3.1）、Raw→Canonical→Read Model 分层（§3.2）、**实体注册表**（§3.3，与 PIT 同级）、Cache 非权威原则（§3.4）、**四时间模型**（§4.1）、**Schema First**（§6.1）；明确 Read Model 为 SDK/REST 唯一读取入口。
 
 ## 1. 三层结构（概览）
 
@@ -17,7 +17,7 @@ updated_date: '2026-09-14 08:18'
            ▲ 仅「采集/回填」可调用
 
 数据层    控制面 | 调度 / 质量检查 / 数据字典与血缘 / 任务与配额观测
-          数据面 | Security Master + DataPanel（Raw→Canonical→Read Model）→ TimescaleDB；DuckDB 批量派生
+          数据面 | 实体注册表 + DataPanel（Raw→Canonical→Read Model）→ TimescaleDB；DuckDB 批量派生
           缓存   | L1 进程内 + L2 Redis（横切；非权威）
 
 服务层    FinDataPlatform（SDK 优先）
@@ -72,7 +72,7 @@ updated_date: '2026-09-14 08:18'
    - 升版本 = 新旧并存过渡期 + 弃用公告；`_v1` 冻结后只增不改，移除字段须先弃用；
 4. Read Model 是**权威数据的投影**，非缓存：缓存只加速，不改变读取语义（§3.4）。
 
-### 3.3 引用注册表（Reference Registry / Entity Graph；冻结稿修订 2026-09-13）
+### 3.3 实体注册表（Entity Registry / Entity Graph；冻结稿修订 2026-09-13）
 
 **定位**：回答"数据说的是谁"——**实体身份、关系与外部标识**。不含交易状态（交易状态属数据集，PIT 事件驱动），不含数据目录（属字典），不含源映射（属 Hub/字典）。
 
@@ -201,7 +201,7 @@ updated_date: '2026-09-14 08:18'
 |---|---|
 | 数据字典 / Schema First | TASK-3.2（规范：doc-11） |
 | 存储（Raw/Canonical/Read Model 落地、分区迁移） | TASK-3.3 |
-| Security Master | TASK-3.14 |
+| 实体注册表（Entity Registry） | TASK-3.14 |
 | 质量与新鲜度 SLA | TASK-3.5 |
 | 调度与 watermark | TASK-3.6 |
 | Redis 缓存（非权威） | TASK-3.9 |

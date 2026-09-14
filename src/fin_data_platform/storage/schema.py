@@ -3,7 +3,7 @@
 - 类型映射：int64→BigInteger、float64→Double、decimal→Numeric(p,s)、
   string→Text、enum→String(32)、bool→Boolean、date→Date、timestamp(_tz)→DateTime；
 - 主键 = ``physical_key``；业务查询索引 = ``business_key``；
-- 合并 引用注册表 参照表（``ref`` schema）；
+- 合并 实体注册表 参照表（``ref`` schema）；
 - TimescaleDB 专属语句（hypertable/压缩）由 :func:`timescale_statements` 生成。
 """
 

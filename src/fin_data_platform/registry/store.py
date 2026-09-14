@@ -1,4 +1,4 @@
-"""Security Master 最小持久化：canonical 代码 → 稳定 ``entity_id``。
+"""实体注册表最小持久化：canonical 代码 → 稳定 ``entity_id``。
 
 TASK-3.14 的完整持久化仓储尚未落地；同步写入端需要稳定的实体主键，本模块提供
 最小能力：按 canonical 代码读取现有身份，缺失则分配并写入

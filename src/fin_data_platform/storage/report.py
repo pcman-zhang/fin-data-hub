@@ -1,6 +1,6 @@
 """数据库文档生成（Schema First）：表/字段/依赖 → Markdown。
 
-由字典 + 引用注册表 schema 自动生成，保证文档与 DDL 同源（doc-11 §7）。
+由字典 + 实体注册表 schema 自动生成，保证文档与 DDL 同源（doc-11 §7）。
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from fin_data_platform.dictionary.models import DatasetSpec
 from fin_data_platform.storage.schema import build_metadata
 
 _REF_TABLES = {
-    "ref.entity": "引用注册表（实体身份 + 分类面 + PIT 属性；SCD2）",
+    "ref.entity": "实体注册表（实体身份 + 分类面 + PIT 属性；SCD2）",
     "ref.entity_code_history": "canonical 代码履历（代码变更/复用）",
     "ref.entity_relation": "实体关系（单向存储；inverse 词表驱动双向查询）",
     "ref.entity_external_id": "实体外部标识（isin/figi/cusip/sedol/lei/uscc）",
@@ -45,7 +45,7 @@ def database_markdown(root: Path | None = None) -> str:
     lines: list[str] = [
         "# 数据库设计：表 / 字段 / 依赖（自动生成）",
         "",
-        "> 由数据字典与 引用注册表 schema 生成（Schema First）；请勿手改，变更走字典。",
+        "> 由数据字典与 实体注册表 schema 生成（Schema First）；请勿手改，变更走字典。",
         "",
         "## 1. 表清单与作用",
         "",

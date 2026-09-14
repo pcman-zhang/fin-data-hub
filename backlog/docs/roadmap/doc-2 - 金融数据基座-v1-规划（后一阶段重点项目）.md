@@ -3,7 +3,7 @@ id: doc-2
 title: 金融数据基座 v1 规划（后一阶段重点项目）
 type: guide
 created_date: '2026-09-13 05:58'
-updated_date: '2026-09-13 12:14'
+updated_date: '2026-09-14 14:23'
 ---
 # 金融数据基座 v1（后一阶段重点项目）规划草案
 
@@ -178,9 +178,9 @@ docker/                  # 镜像与 compose（单机）
   - **基金持仓/份额**：披露滞后，知识时间 = 公告日。
 - **标准字段（四时间模型，详见 doc-10 §4）**：`event_time`（事件时间，含 `report_period`）、`publish_time`（官方发布时间）、`knowledge_time`（平台获知时间）、`ingest_time`（入库时间）、`version`、`is_latest`、`source`。
 - **查询语义**：`as_of` 过滤 `knowledge_date <= as_of` 后取每键最新版本；不传 `as_of` 即"当前最新"；更正不回写历史（append-only）。
-- **PIT 宇宙（Security Master 必须含退市标的）**：`as_of` 时点标的池 =
+- **PIT 宇宙（实体注册表（Entity Registry）必须含退市标的）**：`as_of` 时点标的池 =
   `list_date <= as_of AND (delist_date IS NULL OR delist_date > as_of)`；
-  - Security Master 必须覆盖 `L / P / D` 全部状态（含已退市），并保留 `list_date / delist_date`；
+  - 实体注册表（Entity Registry）必须覆盖 `L / P / D` 全部状态（含已退市），并保留 `list_date / delist_date`；
   - **退市标的的行情/财务/分红/停牌等历史数据必须完整入库**（否则回测/成分还原存在幸存者偏差）；
   - 名称变更（`namechange`）、ST 历史（`stock_st`）、停牌（`suspend_d`）、行业归属变更
     （`index_member_all` in/out）按**生效区间**独立留痕，用于 as-of 时点还原；
@@ -215,7 +215,7 @@ docker/                  # 镜像与 compose（单机）
 
 - **每市场独立数据子平面**（各自 Normalization）：`cn_equity`（沪深北 + 主板/创业板/科创板 board 维度）、`cn_fund`、`cn_futures`、`cn_options`、`hk_equity`、`us_equity`、`us_options`；按需扩展。
 - **差异由子平面承担**：代码格式（CN 6 位 / HK 5 位 / US ticker）、字段与粒度、单位（手/股）、交易日历、币种、复权与公司行为、交易规则（如 CN 无 PUT、T+1）。
-- **共享层**：Security Master（跨市场标的与别名/退市）、PIT 框架、数据字典、质量框架、存储基础设施与统一 SDK 接口（panel 参数）。
+- **共享层**：实体注册表（Entity Registry，跨市场实体与代码履历/退市）、PIT 框架、数据字典、质量框架、存储基础设施与统一 SDK 接口（panel 参数）。
 - **宏观平面单一**：EDB 类指标（利率/收益率/资金/大宗/汇率官方序列）；汇率建议归宏观（低频官方/收盘序列）；若未来做交易级 FX 行情再单设 FX 平面。
 - **归属按数据形态而非标的名**：TLT/SHY 作为 ETF 价格属美股权益平面；EDB 中的美债收益率序列属宏观平面。
 - **代码模型扩展**：HK（5 位数字 `.HK`）、US（字母 ticker，`.O`/`.N`/`.US` 映射待定）需在 `SecCode`/映射层扩展，纳入 `TASK-3.1` 设计。

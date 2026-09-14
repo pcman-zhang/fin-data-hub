@@ -1,7 +1,7 @@
 dataset: ref.entity
 semantic_version: 1
 domain: ref
-description: 引用注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket）
+description: 实体注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket）
 pit_class: scd2
 business_key: [entity_id, valid_from]
 physical_key: [entity_id, valid_from, knowledge_time, version]

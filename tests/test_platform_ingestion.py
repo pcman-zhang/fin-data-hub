@@ -102,7 +102,7 @@ def test_sync_daily_bar_is_idempotent(engine) -> None:
     assert (first.fetched, first.rows_written, first.provider) == (2, 2, "akshare")
 
     second = sync_daily_bar(engine, hub, code="600519.SH", start=DAY1, end=DAY2)
-    assert second.entity_id == first.entity_id  # 稳定主键（Security Master）
+    assert second.entity_id == first.entity_id  # 稳定主键（实体注册表）
     assert second.rows_written == 0  # 物理键冲突跳过
 
     metadata, _ = build_metadata()

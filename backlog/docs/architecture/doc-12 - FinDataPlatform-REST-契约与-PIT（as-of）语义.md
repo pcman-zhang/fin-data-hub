@@ -3,7 +3,7 @@ id: doc-12
 title: FinDataPlatform REST 契约与 PIT（as-of）语义
 type: specification
 created_date: '2026-09-13 12:28'
-updated_date: '2026-09-13 12:40'
+updated_date: '2026-09-14 14:23'
 ---
 # FinDataPlatform REST 契约与 PIT（as-of）语义
 
@@ -36,9 +36,9 @@ updated_date: '2026-09-13 12:40'
 
 | 方法 | 路由 | 参数（核心） |
 |---|---|---|
-| GET | `/v1/datasets/{dataset}/rows` | `security_id`（可重复）、`start/end`、`version_mode`、`as_of`（as_of 模式必填）、`as_of_policy`、`fallback_mode`、`fields`、`filters`（结构化）、`order_by`、`limit`、`cursor`、`format` |
-| GET | `/v1/securities/{security_id}` | Security Master 基础信息 |
-| GET | `/v1/securities/{security_id}/aliases` | 多源代码映射（含有效期） |
+| GET | `/v1/datasets/{dataset}/rows` | `entity_id`（可重复）、`start/end`、`version_mode`、`as_of`（as_of 模式必填）、`as_of_policy`、`fallback_mode`、`fields`、`filters`（结构化）、`order_by`、`limit`、`cursor`、`format` |
+| GET | `/v1/entities/{entity_id}` | 实体注册表基础信息 |
+| GET | `/v1/entities/{entity_id}/aliases` | 多源代码映射（含有效期） |
 
 > **不设 `/latest`**：`version_mode=latest` 即"当前最新"；`version_mode=as_of` + `as_of=now` 即"当前时点可见"。单一入口，避免两套语义漂移。
 
@@ -60,7 +60,7 @@ updated_date: '2026-09-13 12:40'
 | `get_bars(...)` | `GET /v1/datasets/cn_equity.daily_bar/rows?...` |
 | `get_financials(kind=balance_sheet)` | `GET /v1/datasets/cn_equity.financials.balance_sheet/rows` |
 | `get_market_events(kind=namechange)` | `GET /v1/datasets/cn_equity.market_events.namechange/rows` |
-| `get_security_info(...)` | `GET /v1/securities/{security_id}` |
+| `get_entity_info(...)` | `GET /v1/entities/{entity_id}` |
 
 > 已定（§10-1）：dataset-generic——SDK 保持语义化方法，REST 保持资源化，避免数百个 typed endpoint。
 
@@ -106,7 +106,7 @@ updated_date: '2026-09-13 12:40'
 ```json
 {"filters": [
   {"field": "trade_date", "op": "between", "value": ["2024-01-01", "2024-12-31"]},
-  {"field": "security_id", "op": "in", "value": [10001, 10002]},
+  {"field": "entity_id", "op": "in", "value": [10001, 10002]},
   {"field": "status", "op": "eq", "value": "ACTIVE"}
 ]}
 ```
@@ -122,7 +122,7 @@ cursor = (order_by, business_key, physical_key)
 ```
 
 - `order_by` 默认 = 业务键升序；游标编码 `order_by` 与最后一行的业务键 + 物理键；
-- 覆盖 `index_member` 等非 `(security_id, trade_date)` 主键的数据集。
+- 覆盖 `index_member` 等非 `(entity_id, trade_date)` 主键的数据集。
 
 ### 4.3 ETag / 缓存键（含数据代次）
 

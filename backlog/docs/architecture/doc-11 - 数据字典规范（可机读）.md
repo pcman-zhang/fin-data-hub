@@ -3,7 +3,7 @@ id: doc-11
 title: 数据字典规范（可机读）
 type: specification
 created_date: '2026-09-13 12:16'
-updated_date: '2026-09-14 04:39'
+updated_date: '2026-09-14 14:23'
 ---
 # 数据字典规范（可机读）
 
@@ -57,7 +57,7 @@ platform/dictionary/
 | `domain` | enum | ✅ | doc-10 §3.1 的 DataDomain |
 | `description` | str | ✅ | 口径、用途、注意事项 |
 | `pit_class` | enum | ✅ | `market` / `versioned` / `scd2` / `snapshot` |
-| `business_key` | [str] | ✅ | 业务主键（如 `[security_id, trade_date]`） |
+| `business_key` | [str] | ✅ | 业务主键（如 `[entity_id, trade_date]`） |
 | `physical_key` | [str] | ✅ | 物理唯一键（append-only：`business_key + knowledge_time + version`） |
 | `grain` | str | ✅ | 粒度描述 |
 | `update_sla` | obj | ✅ | `{frequency, earliest_available, latest_available, tolerance}` |
@@ -102,7 +102,7 @@ coverage:
 
 | rule | 参数 | 示例 |
 |---|---|---|
-| `unique` | `keys` | `keys: [security_id, trade_date]` |
+| `unique` | `keys` | `keys: [entity_id, trade_date]` |
 | `not_null` | `fields` | |
 | `range` | `field, min, max` | `volume >= 0` |
 | `enum` | `field, values` | |
@@ -173,8 +173,8 @@ semantic_version: 1
 domain: cn_equity
 description: A 股日线行情（不复权原始价；复权价按 raw + factor、as-of 计算）
 pit_class: market
-business_key: [security_id, trade_date]
-physical_key: [security_id, trade_date, knowledge_time, version]
+business_key: [entity_id, trade_date]
+physical_key: [entity_id, trade_date, knowledge_time, version]
 grain: 标的 × 交易日
 update_sla:
   frequency: daily
@@ -202,11 +202,11 @@ storage:
   retention: all
   compression:                     # 仅已封口 chunk；不得改变查询语义（doc-13 §3.4）
     after: 7 days
-    segment_by: security_id
+    segment_by: entity_id
     order_by: trade_date
 quality:
   - rule: unique
-    keys: [security_id, trade_date]
+    keys: [entity_id, trade_date]
   - rule: range
     field: volume
     min: 0
@@ -235,10 +235,10 @@ mappings:
       volume: vol
       amount: amount
 fields:
-  - name: security_id
+  - name: entity_id
     type: int64
     nullable: false
-    description: 平台标的 ID（Security Master 主键）
+    description: 平台标的 ID（实体注册表主键）
     pit_role: none
   - name: trade_date
     type: date

@@ -242,3 +242,62 @@ def test_apscheduler_on_postgres(engine: Engine, market_hub) -> None:
             {"id": spec.job_id},
         ).scalar_one()
     assert int(jobs) == 1
+
+
+def test_entrypoint_with_sync_settings(engine: Engine) -> None:
+    """配置驱动（FDP_SYNC_*）启动 Runtime：端到端入队、执行、水位推进。"""
+    import subprocess
+    import sys
+    from time import monotonic, sleep
+
+    job_id = f"sync.cn_equity.daily_bar.{CODE}"
+    repo = SqlMetaRepository(engine)
+    with engine.begin() as connection:
+        connection.execute(delete(job_runs).where(job_runs.c.job_id == job_id))
+    repo.set_watermark(
+        "cn_equity.daily_bar",
+        scope=CODE,
+        watermark_time=datetime.combine(SECOND_WINDOW[0], time(0, 0)),
+    )
+
+    env = dict(os.environ)
+    env.update(
+        {
+            "FDP_SYNC_CODES": CODE,
+            "FDP_SYNC_START": SECOND_WINDOW[0].isoformat(),
+            "FDP_SYNC_SOURCE": "tushare",
+            "FDP_SYNC_SCHEDULE": "interval:2",
+        }
+    )
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "fin_data_platform.runtime",
+            "--role",
+            "all",
+            "--log-level",
+            "WARNING",
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        deadline = monotonic() + 60
+        finished = None
+        while monotonic() < deadline:
+            runs = repo.list_runs(job_id=job_id)
+            if runs and runs[0].status in ("succeeded", "failed", "dead"):
+                finished = runs[0]
+                break
+            sleep(0.5)
+        assert finished is not None, "配置驱动启动未产生运行记录"
+        assert finished.status == "succeeded", f"运行失败: {finished.error}"
+        mark = repo.get_watermark("cn_equity.daily_bar", scope=CODE)
+        assert mark is not None and mark.watermark_time is not None
+        assert mark.watermark_time.date() > SECOND_WINDOW[0]
+    finally:
+        process.terminate()
+        _stdout, stderr = process.communicate(timeout=20)
+    assert "readiness 未通过" not in stderr.decode("utf-8", errors="replace")

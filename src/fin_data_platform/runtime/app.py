@@ -197,6 +197,11 @@ class RuntimeApp:
         return results
 
     # ------------------------------------------------------------ 提交与查询
+    @property
+    def registry(self) -> TaskRegistry:
+        """任务注册表（只读用途：查询任务定义 / 构造意图）。"""
+        return self._registry
+
     def submit(self, intent: JobIntent) -> str:
         return self._dispatcher.submit(intent)
 

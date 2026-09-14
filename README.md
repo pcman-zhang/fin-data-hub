@@ -189,6 +189,22 @@ export $(grep -v '^#' .env | xargs)
 - 基线文件：`migrations/versions/0001_baseline.py`（`write_baseline()` 由字典生成；漂移校验见 `tests/test_platform_migrations.py`）。
 - 数据库设计（表 / 字段 / 依赖）见 `doc-17`；存储 schema 策略见 `doc-13`。
 
+### 运行 Runtime（同步任务，TASK-3.6）
+
+```bash
+export TUSHARE_TOKEN=...                       # 数据源凭证（由调用方/环境注入）
+export FDP_SYNC_CODES=600519.SH,000001.SZ      # canonical 代码清单（逗号分隔）
+export FDP_SYNC_START=2026-09-01               # 首次窗口起点（ISO 日期）
+export FDP_SYNC_SOURCE=tushare                 # 必填：显式数据源（不做隐式路由）
+export FDP_SYNC_SCHEDULE='0 9 * * 1-5'         # UTC cron；或 interval:<秒>；缺省为轮询追平
+
+.venv/bin/python -m fin_data_platform.runtime --role all
+# --role all（默认单机）| scheduler（仅调度分发）| worker（仅执行）
+```
+
+Runtime 启动即追平（水位 → 最近已收盘交易日），成功后推进 `meta.watermarks`；
+失败按 `meta.job_runs` 记录并重试；调度注册持久化在 APScheduler job store。
+
 ## 接入层（fin_data_hub）
 
 > 独立包 `fin-data-hub`（**预留包名，当前未单独发布**，随本仓库 `src/fin_data_hub` 提供）；数据源适配、限流与内存缓存；仅在采集 / 回填场景直接使用。

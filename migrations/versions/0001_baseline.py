@@ -32,6 +32,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (entity_id, trade_date, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_adj_factor_business ON cn_equity.adj_factor (entity_id, trade_date)""",
     """CREATE TABLE IF NOT EXISTS cn_equity.daily_bar (
 	entity_id BIGINT NOT NULL, 
 	trade_date DATE NOT NULL, 
@@ -48,6 +49,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (entity_id, trade_date, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_daily_bar_business ON cn_equity.daily_bar (entity_id, trade_date)""",
     """CREATE TABLE IF NOT EXISTS cn_equity.financials_balance_sheet (
 	issuer_id BIGINT NOT NULL, 
 	ann_date DATE NOT NULL, 
@@ -68,6 +70,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (issuer_id, end_date, report_type, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_financials_balance_sheet_business ON cn_equity.financials_balance_sheet (issuer_id, end_date, report_type)""",
     """CREATE TABLE IF NOT EXISTS cn_equity.index_member (
 	entity_id BIGINT NOT NULL, 
 	l1_code TEXT NOT NULL, 
@@ -81,6 +84,7 @@ UPGRADE_STATEMENTS = [
 	is_new BOOLEAN NOT NULL, 
 	PRIMARY KEY (entity_id, l3_code, in_date)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_index_member_business ON cn_equity.index_member (entity_id, l3_code, in_date)""",
     """CREATE TABLE IF NOT EXISTS cn_equity.index_weight (
 	index_entity_id BIGINT NOT NULL, 
 	trade_date DATE NOT NULL, 
@@ -92,6 +96,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (index_entity_id, trade_date, con_entity_id, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_index_weight_business ON cn_equity.index_weight (index_entity_id, trade_date, con_entity_id)""",
     """CREATE TABLE IF NOT EXISTS cn_equity.listing_lifecycle (
 	entity_id BIGINT NOT NULL, 
 	status VARCHAR(32) NOT NULL, 
@@ -103,6 +108,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (entity_id, start_date, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_listing_lifecycle_business ON cn_equity.listing_lifecycle (entity_id, start_date)""",
     """CREATE TABLE IF NOT EXISTS cn_equity.market_events_namechange (
 	entity_id BIGINT NOT NULL, 
 	name TEXT NOT NULL, 
@@ -115,6 +121,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (entity_id, start_date, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_market_events_namechange_business ON cn_equity.market_events_namechange (entity_id, start_date)""",
     """CREATE TABLE IF NOT EXISTS cn_fund.nav (
 	entity_id BIGINT NOT NULL, 
 	date DATE NOT NULL, 
@@ -127,6 +134,7 @@ UPGRADE_STATEMENTS = [
 	provider VARCHAR(32) NOT NULL, 
 	PRIMARY KEY (entity_id, date, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_nav_business ON cn_fund.nav (entity_id, date)""",
     """CREATE TABLE IF NOT EXISTS ref.entity (
 	entity_id BIGINT NOT NULL, 
 	entity_type VARCHAR(32) NOT NULL, 
@@ -146,6 +154,8 @@ UPGRADE_STATEMENTS = [
 	version BIGINT NOT NULL, 
 	PRIMARY KEY (entity_id, valid_from, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_business ON ref.entity (entity_id, valid_from)""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_code ON ref.entity (code)""",
     """CREATE TABLE IF NOT EXISTS ref.entity_code_history (
 	entity_id BIGINT NOT NULL, 
 	code TEXT NOT NULL, 
@@ -155,6 +165,8 @@ UPGRADE_STATEMENTS = [
 	version BIGINT NOT NULL, 
 	PRIMARY KEY (entity_id, code, valid_from, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_code_history_business ON ref.entity_code_history (entity_id, code, valid_from)""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_code_history_code ON ref.entity_code_history (code)""",
     """CREATE TABLE IF NOT EXISTS ref.entity_external_id (
 	entity_id BIGINT NOT NULL, 
 	id_type VARCHAR(32) NOT NULL, 
@@ -165,6 +177,8 @@ UPGRADE_STATEMENTS = [
 	version BIGINT NOT NULL, 
 	PRIMARY KEY (entity_id, id_type, id_value, valid_from, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_external_id_business ON ref.entity_external_id (entity_id, id_type, id_value, valid_from)""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_external_id_value ON ref.entity_external_id (id_value)""",
     """CREATE TABLE IF NOT EXISTS ref.entity_relation (
 	entity_id BIGINT NOT NULL, 
 	related_id BIGINT NOT NULL, 
@@ -175,6 +189,8 @@ UPGRADE_STATEMENTS = [
 	version BIGINT NOT NULL, 
 	PRIMARY KEY (entity_id, related_id, relation_type, valid_from, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_relation_business ON ref.entity_relation (entity_id, related_id, relation_type, valid_from)""",
+    """CREATE INDEX IF NOT EXISTS ix_entity_relation_related ON ref.entity_relation (related_id)""",
     """CREATE TABLE IF NOT EXISTS ref.relation_type_dict (
 	relation_type TEXT NOT NULL, 
 	inverse_relation TEXT NOT NULL, 
@@ -185,6 +201,7 @@ UPGRADE_STATEMENTS = [
 	version BIGINT NOT NULL, 
 	PRIMARY KEY (relation_type, valid_from, knowledge_time, version)
 )""",
+    """CREATE INDEX IF NOT EXISTS ix_relation_type_dict_business ON ref.relation_type_dict (relation_type, valid_from)""",
     """SELECT create_hypertable('cn_equity.adj_factor', 'trade_date', chunk_time_interval => INTERVAL '1 month', migrate_data => TRUE, if_not_exists => TRUE);""",
     """ALTER TABLE cn_equity.adj_factor SET (timescaledb.compress, timescaledb.compress_segmentby = 'entity_id', timescaledb.compress_orderby = 'trade_date');""",
     """SELECT add_compression_policy('cn_equity.adj_factor', INTERVAL '7 days', if_not_exists => TRUE);""",

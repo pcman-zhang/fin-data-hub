@@ -222,7 +222,10 @@ export $(grep -v '^#' .env | xargs)              # 或手动 export DATABASE_*
 # 版本化迁移（Alembic；基线由数据字典生成）
 .venv/bin/python -c "from fin_data_platform.storage.migrations import upgrade; upgrade()"
 # 回滚：downgrade()（等价 alembic downgrade base）
-.venv/bin/python -m pytest -m integration        # 真实 PG 集成验证
+
+# 集成验证（真实 PG）：FDP_TEST_DATABASE=1 显式开启破坏性迁移测试
+# 注意：tests/test_integration_migrations.py 会 DROP 目标库全部项目表，务必指向 dev 库
+FDP_TEST_DATABASE=1 .venv/bin/python -m pytest -m integration
 ```
 
 基线迁移文件 `migrations/versions/0001_baseline.py` 由字典生成（`write_baseline()`），

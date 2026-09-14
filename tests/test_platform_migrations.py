@@ -29,8 +29,26 @@ def test_baseline_upgrade_covers_schemas_tables_hypertables_and_read_models() ->
     assert "add_compression_policy('cn_equity.daily_bar'" in joined
     # doc-13 §4：默认不建物理外键；读模型（mart.entity_*）纳入基线
     assert "REFERENCES" not in joined
+    assert "CREATE INDEX IF NOT EXISTS ix_entity_code ON ref.entity" in joined
+    assert "CREATE INDEX IF NOT EXISTS ix_daily_bar_business" in joined
     assert "CREATE OR REPLACE VIEW mart.entity_latest_v1" in joined
     assert "CREATE OR REPLACE FUNCTION mart.entity_asof(as_of timestamptz)" in joined
+
+
+def test_baseline_covers_every_metadata_index() -> None:
+    """doc-13 §4/§9：字典/ref 手写表的业务索引必须随基线落地。"""
+    metadata, _ = build_metadata()
+    upgrade, _ = baseline_statements()
+    joined = "\n".join(upgrade)
+    indexes = [
+        index
+        for table in metadata.tables.values()
+        for index in table.indexes
+        if index.name
+    ]
+    assert indexes, "metadata 应包含业务索引"
+    for index in indexes:
+        assert f"CREATE INDEX IF NOT EXISTS {index.name} ON" in joined
 
 
 def test_baseline_downgrade_drops_read_models_then_tables() -> None:

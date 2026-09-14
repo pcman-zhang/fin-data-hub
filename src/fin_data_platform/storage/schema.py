@@ -151,9 +151,9 @@ def timescale_statements(
 def schema_sql(
     metadata: MetaData, *, dialect: str = "postgresql", if_not_exists: bool = False
 ) -> list[str]:
-    """生成建 schema/表的 DDL（迁移与审查用）。"""
+    """生成建 schema/表/索引的 DDL（迁移与审查用）。"""
     from sqlalchemy.dialects import postgresql, sqlite
-    from sqlalchemy.schema import CreateSchema, CreateTable
+    from sqlalchemy.schema import CreateIndex, CreateSchema, CreateTable
 
     dialect_obj = postgresql.dialect() if dialect == "postgresql" else sqlite.dialect()
     schemas = sorted({table.schema for table in metadata.tables.values() if table.schema})
@@ -161,10 +161,20 @@ def schema_sql(
         str(CreateSchema(schema, if_not_exists=True).compile(dialect=dialect_obj))
         for schema in schemas
     ]
-    statements.extend(
-        str(
-            CreateTable(table, if_not_exists=if_not_exists).compile(dialect=dialect_obj)
+    for table in metadata.sorted_tables:
+        statements.append(
+            str(
+                CreateTable(table, if_not_exists=if_not_exists).compile(
+                    dialect=dialect_obj
+                )
+            )
         )
-        for table in metadata.sorted_tables
-    )
+        for index in sorted(table.indexes, key=lambda item: item.name or ""):
+            statements.append(
+                str(
+                    CreateIndex(index, if_not_exists=if_not_exists).compile(
+                        dialect=dialect_obj
+                    )
+                )
+            )
     return statements

@@ -17,7 +17,7 @@ from datetime import date, datetime
 
 from fin_data_platform.runtime._util import utcnow
 from fin_data_platform.runtime.models import JobIntent, JobRun
-from fin_data_platform.runtime.registry import JobContext, TaskRegistry, TaskSpec
+from fin_data_platform.runtime.registry import JobContext, JobResult, TaskRegistry, TaskSpec
 from fin_data_platform.runtime.repository import MetaRepository
 
 #: 到期窗口提供者：(spec, now) -> 需要执行的 (window_start, window_end) 序列
@@ -53,12 +53,19 @@ class Scheduler:
         self._clock = clock
         self.health = SchedulerHealth()
 
-    def tick(self, now: datetime | None = None) -> list[JobIntent]:
-        """计算本轮到期意图（无 due_provider 时返回空：仅手动触发）。"""
+    def tick(
+        self, now: datetime | None = None, *, only: set[str] | None = None
+    ) -> list[JobIntent]:
+        """计算本轮到期意图（无 due_provider 时返回空：仅手动触发）。
+
+        ``only`` 限定任务集合（混合注册表下，轮询线程只负责未配置 schedule 的任务）。
+        """
         moment = now or self._clock()
         intents: list[JobIntent] = []
         if self._due_provider is not None:
             for spec in self._registry:
+                if only is not None and spec.job_id not in only:
+                    continue
                 for window_start, window_end in self._due_provider(spec, moment):
                     intents.append(
                         self._registry.intent(
@@ -75,6 +82,7 @@ class Scheduler:
         submit: Callable[[JobIntent], str],
         *,
         interval: float = 1.0,
+        only: set[str] | None = None,
     ) -> None:
         """后台循环：tick 后逐个非阻塞提交（submit 不得阻塞）。
 
@@ -84,7 +92,7 @@ class Scheduler:
         try:
             while not stop.is_set():
                 try:
-                    for intent in self.tick():
+                    for intent in self.tick(only=only):
                         submit(intent)
                 except Exception as exc:
                     self.health.last_error = f"{type(exc).__name__}: {exc}"
@@ -202,6 +210,14 @@ class WorkerPool:
                 finished = self._repo.succeed(
                     run.run_id, rows_written=result.rows_written if result else 0
                 )
+                if spec.on_success is not None:
+                    try:
+                        spec.on_success(context, result or JobResult(), self._repo)
+                    except Exception as exc:  # 回调失败不影响已成功状态
+                        with self._lock:
+                            self.health.last_error = (
+                                f"on_success: {type(exc).__name__}: {exc}"
+                            )
             except Exception as exc:  # 执行异常不污染数据；状态回落元数据
                 finished = self._repo.fail(
                     run.run_id, error=f"{type(exc).__name__}: {exc}"

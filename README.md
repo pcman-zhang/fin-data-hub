@@ -38,18 +38,18 @@ backlog/                 任务与设计文档（Backlog.md CLI 管理）
 ## 安装
 
 ```bash
-pip install "fin-data-hub[tushare]"   # Tushare
-pip install "fin-data-hub[akshare]"   # AkShare
-pip install "fin-data-hub[ifind]"     # 同花顺 iFinD（含 httpx）
-pip install "fin-data-hub[wind]"      # Wind（含 httpx）
-pip install "fin-data-hub[fuyao]"     # Fuyao 同花顺金融数据API（含 httpx）
-pip install "fin-data-hub[baostock]"  # BaoStock 免费源
-pip install "fin-data-hub[platform]"  # 平台层（pydantic / pyyaml / sqlalchemy）
+pip install "fin-data-platform[tushare]"   # Tushare
+pip install "fin-data-platform[akshare]"   # AkShare
+pip install "fin-data-platform[ifind]"     # 同花顺 iFinD（含 httpx）
+pip install "fin-data-platform[wind]"      # Wind（含 httpx）
+pip install "fin-data-platform[fuyao]"     # Fuyao 同花顺金融数据API（含 httpx）
+pip install "fin-data-platform[baostock]"  # BaoStock 免费源
+pip install "fin-data-platform[platform]"  # 平台层（pydantic / pyyaml / sqlalchemy）
 ```
 
 按需安装对应数据源的 extras；不使用某源时无需安装其依赖。核心依赖仅 `pandas`。iFinD / Wind 通过厂商远端 MCP（HTTP JSON-RPC）接入，**不需要安装 WindPy / iFinDPy**。
 
-版本：`fin_data_hub.__version__`（单一来源 `src/fin_data_hub/_version.py`，`pyproject.toml` 动态读取）。
+版本：`fin_data_hub.__version__`（单一来源 `src/fin_data_hub/_version.py`，`pyproject.toml` 动态读取；发行包名为 `fin-data-platform`）。
 
 ## 接入层快速开始（fin_data_hub）
 

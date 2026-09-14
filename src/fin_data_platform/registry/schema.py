@@ -1,4 +1,4 @@
-"""引用注册表存储 schema（SQLAlchemy Core 元数据）。
+"""实体注册表存储 schema（SQLAlchemy Core 元数据）。
 
 DDL 生成与迁移执行由 TASK-3.3 接入；本模块提供可复用的表定义。
 表结构以数据字典（Schema First）为准，本模块为字典条目的存储镜像。

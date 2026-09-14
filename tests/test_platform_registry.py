@@ -1,4 +1,4 @@
-"""引用注册表（doc-10 §3.3）测试：分类面/issuer、代码履历、关系/外部标识、PIT Universe。"""
+"""实体注册表（doc-10 §3.3）测试：分类面/issuer、代码履历、关系/外部标识、PIT Universe。"""
 
 from __future__ import annotations
 

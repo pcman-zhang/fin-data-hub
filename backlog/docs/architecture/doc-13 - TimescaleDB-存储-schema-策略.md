@@ -3,7 +3,7 @@ id: doc-13
 title: TimescaleDB 存储 schema 策略
 type: specification
 created_date: '2026-09-13 12:40'
-updated_date: '2026-09-14 04:39'
+updated_date: '2026-09-14 14:23'
 ---
 # TimescaleDB 存储 schema 策略
 
@@ -36,8 +36,8 @@ updated_date: '2026-09-14 04:39'
 | 时序事实（`market`） | daily_bar、adj_factor、nav、index_weight | hypertable | `business_key + knowledge_time + version` 唯一 | **event_time** |
 | 版本化时序（`versioned`） | financials、market_events | hypertable | 同上（append-only） | **knowledge_time** |
 | 快照（`snapshot`） | index_weight（月度） | hypertable | `business_key + trade_date` | event_time |
-| 属性区间（`scd2`） | security_attribute_history、index_member | 普通表 + 区间列 | `business_key + valid_from` | none |
-| 主数据 | security_master、security_alias | 普通表 | `security_id` / `(security_id, source)` | none |
+| 属性区间（`scd2`） | ref.entity（SCD2）、index_member | 普通表 + 区间列 | `business_key + valid_from` | none |
+| 主数据 | ref.entity、ref.entity_code_history | 普通表 | `entity_id` / `(entity_id, code)` | none |
 
 ## 3. Hypertable 设计
 
@@ -63,7 +63,7 @@ updated_date: '2026-09-14 04:39'
 
 ### 3.3 空间分区
 
-单机不启用 space partitioning；保留 hash（按 `security_id`）选项（需字典显式声明）。
+单机不启用 space partitioning；保留 hash（按 `entity_id`）选项（需字典显式声明）。
 
 ### 3.4 压缩与 PIT（Timescale 特有约束）
 
@@ -98,14 +98,14 @@ updated_date: '2026-09-14 04:39'
    - Read Model = `view`：查询用窗口函数派生；
    - Read Model = `projection_table`：物化 `is_latest` 并建 `(business_key) WHERE is_latest` 部分索引；
    - 理由：派生列在重述/回填/补数下极易漏更新（文档§2 的 `version_mode` 已覆盖三种读语义，无需存储事实重复表达）；
-5. **默认不建外键**：`security_id` 不做 DB 级 FK（高频事实表 + Timescale 最佳实践，避免批量回填性能退化）；完整性由 Security Master 与 Load Pipeline 校验；仅低基数维度表可酌情建 FK。
+5. **默认不建外键**：`entity_id` 不做 DB 级 FK（高频事实表 + Timescale 最佳实践，避免批量回填性能退化）；完整性由实体注册表（Entity Registry）与 Load Pipeline 校验；仅低基数维度表可酌情建 FK。
 
 ## 5. 压缩与保留（TimescaleDB 原生压缩）
 
 | 层/类型 | 压缩策略 | 保留 |
 |---|---|---|
-| Raw | 封口 chunk 后压缩（`segmentby=source/security_id`、`orderby=时间`） | 默认全量（审计） |
-| Canonical（行情/因子） | 7 天后压缩（`segmentby=security_id`、`orderby=event_time`） | 全量 |
+| Raw | 封口 chunk 后压缩（`segmentby=source/entity_id`、`orderby=时间`） | 默认全量（审计） |
+| Canonical（行情/因子） | 7 天后压缩（`segmentby=entity_id`、`orderby=event_time`） | 全量 |
 | Canonical（财务/事件） | 30 天后压缩 | 全量（版本保留） |
 | Read Model | 由 Canonical 派生，不单独压缩 | 随源 |
 
@@ -152,7 +152,7 @@ updated_date: '2026-09-14 04:39'
 | 1 | schema 组织 | 域 schema（`cn_equity.daily_bar` 与 DataPanel 同名）+ `mart/meta/raw/ref` |
 | 2 | 分区策略 | `partition_strategy` 显式字段；默认 `market→event_time`、`versioned→knowledge_time`、`snapshot→event_time` |
 | 3 | `is_latest` | **Canonical 不存**；Read Model 派生（view 窗口函数 / projection 物化） |
-| 4 | 外键 | **默认不建**；Security Master + Load Pipeline 校验 |
+| 4 | 外键 | **默认不建**；实体注册表 + Load Pipeline 校验 |
 | 5 | Read Model 实现 | `view` 默认；性能不足 → `projection_table`；**首期不用 materialized_view** |
 | 6 | Raw 保留 | 默认全量（审计） |
 | 7 | 连续聚合 | 仅运维统计 |

@@ -1,4 +1,4 @@
-"""引用注册表读模型真实 PG 集成测试（默认跳过：``pytest -m integration``）。
+"""实体注册表读模型真实 PG 集成测试（默认跳过：``pytest -m integration``）。
 
 验证 ``mart.entity_latest_v1`` 视图与 ``mart.entity_asof(ts)`` 表函数可在真实
 PostgreSQL 创建并返回正确结果（RETURNS TABLE 列引用无歧义）。

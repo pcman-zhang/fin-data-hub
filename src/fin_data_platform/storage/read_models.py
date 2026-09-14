@@ -1,4 +1,4 @@
-"""引用注册表读模型（doc-10 §3.3 / doc-13 §1.1）。
+"""实体注册表读模型（doc-10 §3.3 / doc-13 §1.1）。
 
 - ``mart.entity_latest_v1``：当前态视图（每实体取 open 行最高版本）；
 - ``mart.entity_asof(as_of)``：属性 as-of 表函数（PostgreSQL；知识时间 + 生效区间双维）；

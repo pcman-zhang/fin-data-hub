@@ -1,4 +1,4 @@
-"""引用注册表（doc-10 §3.3）：实体身份、分类面、关系、外部标识与 PIT Universe。"""
+"""实体注册表（doc-10 §3.3）：实体身份、分类面、关系、外部标识与 PIT Universe。"""
 
 from fin_data_platform.registry.models import (
     BuildStats,

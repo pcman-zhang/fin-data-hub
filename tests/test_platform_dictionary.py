@@ -387,7 +387,7 @@ def test_mappings_align_with_hub_adapter_specs() -> None:
                 continue
             for canonical in mapping.fields:
                 if canonical == "entity_id" or canonical.endswith("_entity_id"):
-                    continue  # 平台内部 ID（由 引用注册表 映射，非源字段）
+                    continue  # 平台内部 ID（由 实体注册表 映射，非源字段）
                 assert canonical in known, (
                     f"{dataset}: mapping 字段 {canonical!r} 未在"
                     f" {mapping.provider} 适配器 spec 中定义"

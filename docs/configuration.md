@@ -119,6 +119,7 @@ config = HubConfig(rate_limits={"ifind": RateLimitConfig(rate=2.0, burst=2.0, ti
 | `DATABASE_USER` | ✅ | 用户名 |
 | `DATABASE_PASSWORD` | ✅ | 密码 |
 | `DATABASE_NAME` | | 默认 `fin_data_platform` |
+| `DATABASE_CONNECT_TIMEOUT` | | 连接超时秒数（默认 5；网络不可达时快速失败） |
 | `FDP_DATABASE_HOST` | | 覆盖主机（地址变动的场景） |
 
 `StorageConfig` 同时支持读写 DSN 分离（`write_dsn` / `read_dsn`）与
@@ -126,11 +127,25 @@ config = HubConfig(rate_limits={"ifind": RateLimitConfig(rate=2.0, burst=2.0, ti
 
 ### 3.2 本地开发数据库
 
+开发数据库（仅 PostgreSQL + TimescaleDB）与全栈编排相互隔离，端口默认退避，
+可与全栈同时运行：
+
 ```bash
 cp .env.example .env                            # 填写密码（.env 不入库）
-docker compose -f docker-compose.dev.yml up -d  # 开发用 PostgreSQL + TimescaleDB
+docker compose -f docker-compose.dev.yml up -d  # 开发库：默认端口 15432（DEV_POSTGRES_PORT）
 export $(grep -v '^#' .env | xargs)
 ```
+
+| 环境 | 项目名 | 默认端口 | 说明 |
+|---|---|---|---|
+| 开发库 | `fin-data-platform-dev` | 15432 | 仅数据库，供本地开发与集成测试 |
+| 全栈 | `fin-data-platform` | 5432 | 数据库 + Redis + 迁移 + Runtime |
+
+集成测试与迁移的 `DATABASE_PORT` 需与所用环境一致（默认指向 5432 全栈库；
+使用开发库时改为 15432）。
+
+> 注意：开发库项目更名为 `fin-data-platform-dev` 后启用**新的数据卷**；
+> 原 `fin-data-platform_*` 卷归全栈环境使用（如需回迁，可手动复制卷内容）。
 
 ### 3.3 版本化迁移
 
@@ -147,9 +162,62 @@ export $(grep -v '^#' .env | xargs)
 
 基线由数据字典生成；字典变更必须新增迁移修订。
 
-## 4. Runtime（控制面）
+## 4. 容器化部署（Docker Compose）
 
-### 4.1 启动
+平台以单镜像多入口交付；数据库、一次性迁移与 Runtime 由 Compose 编排：
+
+```bash
+cp .env.example .env        # 填写 POSTGRES_PASSWORD / DATABASE_*（.env 不入库）
+docker compose up -d        # 数据库 → 迁移 → Runtime（role=all）
+docker compose logs -f runtime
+```
+
+**服务组成**
+
+| 服务 | 说明 |
+|---|---|
+| `timescaledb` | PostgreSQL + TimescaleDB（数据卷持久化） |
+| `redis` | 缓存层基础设施（非权威、无持久化，可随时清空重建） |
+| `migrate` | 一次性迁移（`upgrade()`），成功后退出 |
+| `runtime` | 控制面进程（`--role all`，单机默认） |
+
+**行为约定**
+
+- **项目隔离**：全栈项目名 `fin-data-platform`；开发库项目名
+  `fin-data-platform-dev`（端口默认 15432），两者容器与数据卷互不影响；
+- **自动迁移**：`runtime` 等待 `migrate` 成功后再启动，避免多角色竞争迁移；
+- **拆分角色**（多进程仅凭数据库协调）：先停单机进程，再启动拆分角色——
+
+  ```bash
+  docker compose stop runtime
+  docker compose --profile split up -d runtime-scheduler runtime-worker
+  ```
+
+- **配置注入**：容器内 `DATABASE_HOST` 固定为 `timescaledb`；
+  `FDP_SYNC_*` 与 `TUSHARE_TOKEN` 由 `.env` 注入；未配置 `FDP_SYNC_CODES`
+  时启动为空 Runtime；
+- **变量优先级**：shell 环境变量 > `.env`（本地若曾 `export DATABASE_*`，
+  会覆盖 `.env` 注入，排查时注意清理）；
+- **健康检查**：镜像内置 `--check`（数据库 / 字典 / schema 版本），
+  `docker compose ps` 显示 healthy；
+- **日志与资源**：日志滚动上限 10 MiB × 3；数据库 / 缓存 / 迁移与控制面设置
+  内存上限，控制面另设 CPU 配额；
+- **端口暴露**：数据库端口默认监听所有接口；仅本机访问可设
+  `POSTGRES_BIND=127.0.0.1`（开发库为 `DEV_POSTGRES_BIND`）。
+
+**运维命令**
+
+```bash
+docker compose ps                      # 状态与健康
+docker compose logs -f runtime         # 日志
+docker compose restart runtime         # 重启控制面
+docker compose down                    # 停止（保留数据卷）
+docker compose down -v                 # 停止并清空数据卷（慎用）
+```
+
+## 5. Runtime（控制面）
+
+### 5.1 启动
 
 ```bash
 .venv/bin/python -m fin_data_platform.runtime --role all
@@ -163,7 +231,7 @@ export $(grep -v '^#' .env | xargs)
 
 退出码：`0` 正常停止；`1` 启动健康检查未通过；`2` 配置非法。
 
-### 4.2 同步任务（环境变量）
+### 5.2 同步任务（环境变量）
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
@@ -185,7 +253,7 @@ export FDP_SYNC_SCHEDULE='0 9 * * 1-5'
 行为：启动即从水位追平到最近已收盘交易日，成功后推进水位；失败按运行记录
 重试；调度注册持久化，进程重启不丢。
 
-### 4.3 运行时参数（`RuntimeConfig`）
+### 5.3 运行时参数（`RuntimeConfig`）
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -197,7 +265,7 @@ export FDP_SYNC_SCHEDULE='0 9 * * 1-5'
 | `check_dictionary` | `True` | 启动校验字典 |
 | `check_schema` | `True` | 启动校验数据库 schema |
 
-## 5. 测试用环境变量
+## 6. 测试用环境变量
 
 集成测试读取（库本身不读取这些变量，仅测试使用）：
 

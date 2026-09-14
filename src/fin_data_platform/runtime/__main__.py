@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--role", choices=ROLES, default="all", help="进程角色")
     parser.add_argument("--workers", type=int, default=2, help="WorkerPool 线程数")
     parser.add_argument("--log-level", default="INFO", help="日志级别")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="仅执行就绪检查后退出（0 通过 / 1 未通过；供容器健康检查）",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -63,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
     if report is not None and not report.ok:
         logger.error("readiness 未通过: %s", "; ".join(report.errors))
         return 1
+    if args.check:
+        logger.info("就绪检查通过（--check）")
+        return 0
 
     stop = threading.Event()
 

@@ -45,14 +45,14 @@
 
 ### FinDataPlatform 如何使用
 
-现状（Python 库，已可用）：
+使用者入口是**只读客户端**（SDK/REST，建设中）：客户端只读 Read Model，不直读 Raw / Canonical 物理表；服务以 Docker Compose 独立部署（TASK-3.4），客户端接入见 `doc-12`（TASK-3.7 / 3.11）。
+
+当前仓库内已可用的能力（开发/运维用法）：
 
 - `fin_data_platform.dictionary`：字典加载 / CI 校验 / 数据目录；
 - `fin_data_platform.registry`：实体注册、代码解析、关系与外部标识、PIT Universe；
 - `fin_data_platform.storage`：按字典生成 schema、幂等写入、as-of / latest 读取、实体读模型；
 - `fin_data_platform.storage.migrations`：Alembic 升级 / 回滚。
-
-规划（建设中）：平台作为**服务**独立部署（Docker Compose，TASK-3.4），对外提供只读 Read Model 的 SDK / REST（`doc-12`；TASK-3.7 / 3.11）与管理台（TASK-3.8）；SDK / REST / WebUI 一律不直读 Raw / Canonical 物理表。
 
 当前部署现状：`docker-compose.dev.yml` 只运行**开发用 TimescaleDB（PostgreSQL 17）数据库**，**没有任何 Backend 程序在运行**。
 
@@ -74,28 +74,21 @@
 
 ## 安装
 
-**平台层**（使用平台能力 / 访问服务，不直接对接数据源）：
+平台使用者通过**客户端**只读访问已部署的服务（SDK/REST 建设中，见 TASK-3.7 / 3.11）：
 
 ```bash
-pip install "fin-data-platform[platform]"   # pydantic / pyyaml / sqlalchemy / alembic / psycopg
+pip install fin-data-platform
 ```
 
-**接入层**（仅在需要直接调用数据源时安装，例如自建采集与回填）：数据源 extras 按需选择，互不依赖。
-
-```bash
-pip install "fin-data-platform[tushare]"   # Tushare
-pip install "fin-data-platform[akshare]"   # AkShare
-pip install "fin-data-platform[ifind]"     # 同花顺 iFinD（含 httpx）
-pip install "fin-data-platform[wind]"      # Wind（含 httpx）
-pip install "fin-data-platform[fuyao]"     # Fuyao 金融数据 API（含 httpx）
-pip install "fin-data-platform[baostock]"  # BaoStock
-```
+接入层（数据源采集/回填）由独立包 `fin-data-hub` 提供（**预留包名，当前未单独发布**）：源码位于本仓库 `src/fin_data_hub`，仅供采集侧与开发使用，平台客户端使用者无需安装数据源依赖。
 
 核心依赖仅 `pandas`。iFinD / Wind 通过厂商远端 MCP（HTTP JSON-RPC）接入，**不需要安装 WindPy / iFinDPy**。
 
-版本：`fin_data_hub.__version__`（单一来源 `src/fin_data_hub/_version.py`，`pyproject.toml` 动态读取；发行包名 `fin-data-platform`）。
+版本：单一来源 `src/fin_data_hub/_version.py`（`pyproject.toml` 动态读取）。
 
-## 平台层快速开始（Python 库）
+## 当前用法（Python 库，开发/运维）
+
+以下为仓库内已可用的平台能力（面向开发与运维）；面向使用者的只读客户端（SDK/REST）在建设中，交付形态见「FinDataPlatform 如何使用」。
 
 ```python
 from fin_data_platform.dictionary import catalog_markdown, load_all, validate_directory
@@ -137,7 +130,7 @@ export $(grep -v '^#' .env | xargs)
 
 ## 接入层（fin_data_hub）
 
-> 数据源适配、限流与内存缓存的独立章节；仅在采集 / 回填场景需要直接使用。
+> 独立包 `fin-data-hub`（**预留包名，当前未单独发布**，随本仓库 `src/fin_data_hub` 提供）；数据源适配、限流与内存缓存；仅在采集 / 回填场景直接使用。
 
 ### 特性
 

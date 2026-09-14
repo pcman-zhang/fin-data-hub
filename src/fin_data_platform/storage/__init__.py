@@ -11,6 +11,7 @@ from fin_data_platform.storage.read_models import (
     entity_asof_function_sql,
     entity_asof_query,
     entity_latest_view_sql,
+    entity_read_model_drop_statements,
     entity_read_model_statements,
 )
 from fin_data_platform.storage.readers import as_of_query, latest_query
@@ -35,6 +36,7 @@ __all__ = [
     "entity_asof_function_sql",
     "entity_asof_query",
     "entity_latest_view_sql",
+    "entity_read_model_drop_statements",
     "entity_read_model_statements",
     "latest_query",
     "schema_sql",

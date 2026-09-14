@@ -120,11 +120,19 @@ def entity_asof_query(as_of: datetime, *, table: Table = entity) -> Select[Any]:
 
 
 def entity_read_model_statements(*, dialect: str = "postgresql") -> list[str]:
-    """读模型 DDL 清单（PG：视图 + 表函数；其他方言：仅视图）。"""
+    """读模型 DDL 清单（PG：视图 + 表函数；其他方言：仅视图）."""
     statements = [entity_latest_view_sql(dialect=dialect)]
     if dialect == "postgresql":
         statements.append(entity_asof_function_sql())
     return statements
+
+
+def entity_read_model_drop_statements(*, mart_schema: str = MART_SCHEMA) -> list[str]:
+    """读模型清理语句（回滚必须先删依赖 ref.entity 的视图/函数，再删基表）。"""
+    return [
+        f"DROP VIEW IF EXISTS {mart_schema}.entity_latest_v1;",
+        f"DROP FUNCTION IF EXISTS {mart_schema}.entity_asof(timestamptz);",
+    ]
 
 
 def ensure_entity_read_models(

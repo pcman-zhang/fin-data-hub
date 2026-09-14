@@ -148,7 +148,9 @@ def timescale_statements(
     return statements
 
 
-def schema_sql(metadata: MetaData, *, dialect: str = "postgresql") -> list[str]:
+def schema_sql(
+    metadata: MetaData, *, dialect: str = "postgresql", if_not_exists: bool = False
+) -> list[str]:
     """生成建 schema/表的 DDL（迁移与审查用）。"""
     from sqlalchemy.dialects import postgresql, sqlite
     from sqlalchemy.schema import CreateSchema, CreateTable
@@ -160,7 +162,9 @@ def schema_sql(metadata: MetaData, *, dialect: str = "postgresql") -> list[str]:
         for schema in schemas
     ]
     statements.extend(
-        str(CreateTable(table).compile(dialect=dialect_obj))
+        str(
+            CreateTable(table, if_not_exists=if_not_exists).compile(dialect=dialect_obj)
+        )
         for table in metadata.sorted_tables
     )
     return statements

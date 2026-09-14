@@ -104,6 +104,17 @@ FinDataPlatform 是一个具备 **Point-In-Time（PIT）语义**的金融数据�
 
 当前平台核心能力（Dictionary / Registry / Storage / Migration）可作为**纯库**运行，不依赖常驻服务进程；REST / MCP / 调度器属于**可选**的消费或运维组件。目前 `docker-compose.dev.yml` 只运行开发用 TimescaleDB（PostgreSQL 17）数据库。
 
+## 边界与路线图
+
+| 阶段 | 范围 | 说明 |
+|---|---|---|
+| **V1（必须）** | Dictionary · Storage · Entity Registry · PIT · Runtime · Derived Engine · Read Model · REST · SDK | 平台主体：数据契约、身份与时间语义、控制面 Runtime、消费出口 |
+| **V1.5（仅预留接口）** | Knowledge Provider · RAG Provider · Agent Provider · Factor Provider | **只有抽象（Protocol / 契约），没有实现**；为智能层与因子层预留扩展位 |
+| **V2（未来）** | FIN-RAG · Research Copilot · Natural Language Query · Portfolio Assistant | 仍在平台范围内的智能应用 |
+| **永不进入平台** | Alpha Factor · Backtest Engine · Execution Engine · Broker Gateway | 属于量化投研平台，不属于 FinDataPlatform |
+
+边界原则：平台只负责「正确的数据、正确的时间语义、正确的身份语义、正确的派生语义」；因子挖掘、回测、执行与交易网关属于消费侧的量化投研平台，永不在本平台内实现。
+
 ## 当前状态
 
 | 平台能力 | 状态 |

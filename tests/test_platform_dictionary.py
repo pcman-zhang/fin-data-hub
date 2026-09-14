@@ -337,6 +337,12 @@ def test_catalog_covers_datasets_and_access() -> None:
     assert rows["cn_equity.daily_bar"]["entity"] == "entity"
     assert rows["ref.entity"]["entity"] == "entity"
     assert rows["ref.entity_code_history"]["access"] == "内部（Hub mapper）"
+    # issuer_id 数据集同样按实体登记（财务改挂发行主体）
+    assert rows["cn_equity.financials.balance_sheet"]["entity"] == "entity"
+    assert rows["cn_equity.listing_lifecycle"]["entity"] == "entity"
+    assert rows["ref.entity_relation"]["access"] == "内部（关系注册）"
+    assert rows["ref.entity_external_id"]["access"] == "内部（外部标识注册）"
+    assert rows["ref.relation_type_dict"]["access"] == "内部（关系词表）"
     document = catalog_markdown()
     assert "`cn_fund.nav`" in document
     assert "get_financials" in document

@@ -1,0 +1,75 @@
+dataset: ref.relation_type_dict
+semantic_version: 1
+domain: ref
+description: 关系词表（新增关系词必须先登记；双向查询由 inverse_relation 驱动）
+pit_class: scd2
+business_key: [relation_type, valid_from]
+physical_key: [relation_type, valid_from, knowledge_time, version]
+grain: 关系词 × 生效区间
+update_sla:
+  frequency: daily
+  earliest_available: "T+1 08:00"
+  latest_available: "T+1 22:00"
+  tolerance: "7d"
+sources: []
+coverage:
+  universe: 已登记关系词（issued_by/issues、tracks/tracked_by 等）
+  universe_source: self
+  history_start: "1990-12-19"
+  expected_dates:
+    calendar: ref.trade_calendar
+    frequency: daily
+storage:
+  canonical_table: ref.relation_type_dict
+  read_model: mart.relation_type_dict_v1
+  read_model_impl: view
+  partition_strategy: none
+  partition_interval: none
+  retention: all
+quality:
+  - rule: unique
+    keys: [relation_type, valid_from, knowledge_time, version]
+    severity: error
+  - rule: not_null
+    fields: [relation_type, inverse_relation, description, valid_from, knowledge_time, version]
+    severity: error
+lineage:
+  upstream: []
+  transform: raw
+mappings: []
+fields:
+  - name: relation_type
+    type: string
+    nullable: false
+    description: 关系词
+    pit_role: none
+  - name: inverse_relation
+    type: string
+    nullable: false
+    description: 反向关系词（词表内成对登记）
+    pit_role: none
+  - name: description
+    type: string
+    nullable: false
+    description: 语义说明（主体 → 对象）
+    pit_role: none
+  - name: valid_from
+    type: date
+    nullable: false
+    description: 生效起点（SCD2 闭区间）
+    pit_role: event_time
+  - name: valid_to
+    type: date
+    nullable: true
+    description: 生效终点（NULL=至今）
+    pit_role: none
+  - name: knowledge_time
+    type: timestamp_tz
+    nullable: false
+    description: 该版本进入平台的时间
+    pit_role: knowledge_time
+  - name: version
+    type: int64
+    nullable: false
+    description: 同词条版本号（append-only）
+    pit_role: none

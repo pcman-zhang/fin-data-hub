@@ -1,0 +1,14 @@
+# 关系词表（doc-10 §3.3）：单向存储，双向查询由 inverse_relation 元数据驱动。
+# 新增关系词必须先登记于此（CI 校验唯一性与反向对称，见 tests/test_platform_registry.py）。
+- relation_type: issued_by
+  inverse_relation: issues
+  description: listing --issued_by--> issuer
+- relation_type: issues
+  inverse_relation: issued_by
+  description: issuer --issues--> listing
+- relation_type: tracks
+  inverse_relation: tracked_by
+  description: fund/etf --tracks--> index
+- relation_type: tracked_by
+  inverse_relation: tracks
+  description: index --tracked_by--> fund/etf

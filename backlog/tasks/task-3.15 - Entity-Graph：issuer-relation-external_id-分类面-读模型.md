@@ -4,7 +4,7 @@ title: Entity Graph：issuer / relation / external_id / 分类面 / 读模型
 status: In Progress
 assignee: []
 created_date: '2026-09-14 06:33'
-updated_date: '2026-09-14 06:35'
+updated_date: '2026-09-14 08:12'
 labels: []
 dependencies: []
 parent_task_id: TASK-3
@@ -28,5 +28,9 @@ ordinal: 51000
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. 模型/枚举：entity_type/class/market、social_status、EntityRelation/RelationTypeDict/ExternalId；2. 服务：relation 双向查询（inverse 字典驱动）、external id 管理、issuer 关联；移除交易状态（universe 由数据集推导）；3. schema：ref.entity 调整 + relation/external_id/relation_type_dict 表；4. 字典条目：ref.entity 更新、relation/external_id/relation_type_dict、cn_equity.listing_lifecycle；5. 财务数据集改挂 issuer_id；6. 读模型 mart.entity_latest_v1/entity_asof；7. 测试 + doc-17/19 重生成；8. 全量 pytest/ruff/mypy。
+按 doc-10 §3.3 冻结稿分三片实施（每片含字典同步与测试）：
+1. 分类面与 issuer：EntityType/EntityClass/Market/SocialStatus 枚举；EntityRecord 重构（去 status/sec_type/list_date/delist_date，加 entity_class/market/social_status）；register/refresh/build_from_hub 改造；universe 迁至由生命周期行推导（registry/universe.py）。
+2. relation/external_id：relation_types.yaml 词表（唯一 + inverse 对称校验）；entity_relation/entity_external_id/relation_type_dict schema 与仓储；inverse 字典驱动双向查询（零硬编码）；external id 注册/按值解析；字典条目 ref.entity_relation/ref.entity_external_id/ref.relation_type_dict。
+3. 读模型与财务改挂：balance_sheet 键 entity_id→issuer_id；storage/read_models.py 生成 mart.entity_latest_v1 视图 + mart.entity_asof(ts) 函数（PG）+ SDK as-of 查询构造器；cn_equity.listing_lifecycle 字典条目；catalog/report 实体识别含 issuer_id。
+4. 文档与收口：doc-10 §3.3 状态更新；重生成 doc-17/doc-19；全量 pytest/ruff/mypy；TASK-3.15 验收收口。
 <!-- SECTION:PLAN:END -->

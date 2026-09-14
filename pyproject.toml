@@ -46,6 +46,7 @@ fin_data_platform = [
     "dictionary/_schema/*.json",
     "dictionary/*/*.yaml",
     "dictionary/*/*/*.yaml",
+    "registry/*.yaml",
 ]
 
 [tool.pytest.ini_options]

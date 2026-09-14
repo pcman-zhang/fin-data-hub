@@ -1,7 +1,7 @@
 dataset: ref.entity
 semantic_version: 1
 domain: ref
-description: 引用注册表（实体身份 + PIT 属性/生命周期；SCD2；instrument/series/basket）
+description: 引用注册表（实体身份 + 分类面 + PIT 属性；SCD2；issuer/listing/series/basket）
 pit_class: scd2
 business_key: [entity_id, valid_from]
 physical_key: [entity_id, valid_from, knowledge_time, version]
@@ -13,7 +13,7 @@ update_sla:
   tolerance: "1d"
 sources: []
 coverage:
-  universe: 全域实体（证券含退市；序列/组合按需接入）
+  universe: 全域实体（issuer/证券/序列/组合；含退市证券身份）
   universe_source: self
   history_start: "1990-12-19"
   expected_dates:
@@ -21,7 +21,7 @@ coverage:
     frequency: daily
 storage:
   canonical_table: ref.entity
-  read_model: mart.entity_v1
+  read_model: mart.entity_latest_v1
   read_model_impl: view
   partition_strategy: none
   partition_interval: none
@@ -45,31 +45,31 @@ fields:
     pit_role: none
   - name: entity_type
     type: enum
-    enum: [instrument, series, basket]
+    enum: [issuer, equity, etf, lof, fund, index, bond, future, option, rate, fx, macro, basket]
     nullable: false
-    description: 实体类型
+    description: 实体本体（粗分类）
+    pit_role: none
+  - name: entity_class
+    type: enum
+    enum: [bond_etf, money_etf, reit, equity_index, commodity_future]
+    nullable: true
+    description: 产品细分（entity_type 之下；缺省为未知）
+    pit_role: none
+  - name: market
+    type: enum
+    enum: [cn, hk, us, global]
+    nullable: true
+    description: 市场面
     pit_role: none
   - name: code
     type: string
     nullable: false
-    description: canonical 代码（WindCode 风格）
+    description: canonical 代码（WindCode 风格；issuer 取统一社会信用代码或平台码）
     pit_role: none
   - name: name
     type: string
     nullable: false
     description: 时点名称（变更产生新 SCD2 行）
-    pit_role: none
-  - name: status
-    type: enum
-    enum: [L, P, D, active, paused]
-    nullable: false
-    description: 状态（instrument L/P/D；series/basket active/paused）
-    pit_role: none
-  - name: sec_type
-    type: enum
-    enum: [stock, etf, lof, fund, index, future, option, bond, fx_pair]
-    nullable: true
-    description: 标的类型（instrument 使用）
     pit_role: none
   - name: currency
     type: string
@@ -91,20 +91,16 @@ fields:
     nullable: true
     description: 单位（series 使用）
     pit_role: none
-  - name: list_date
-    type: date
-    nullable: true
-    description: 上市/起始日
-    pit_role: event_time
-  - name: delist_date
-    type: date
-    nullable: true
-    description: 退市日（NULL=在市；退市永久保留）
-    pit_role: none
   - name: algorithm_id
     type: string
     nullable: true
     description: 组合/派生序列对应算法（basket）
+    pit_role: none
+  - name: social_status
+    type: enum
+    enum: [operating, defunct, restructuring]
+    nullable: true
+    description: 社会实体状态（issuer 专用：存续/倒闭/重整）
     pit_role: none
   - name: valid_from
     type: date

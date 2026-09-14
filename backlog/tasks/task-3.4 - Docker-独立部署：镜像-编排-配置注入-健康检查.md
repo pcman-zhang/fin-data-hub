@@ -1,7 +1,7 @@
 ---
 id: TASK-3.4
 title: Docker 独立部署：镜像 / 编排 / 配置注入 / 健康检查
-status: In Progress
+status: Done
 assignee:
   - '@freeman'
 created_date: '2026-09-13 06:00'
@@ -24,9 +24,9 @@ ordinal: 23000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 docker compose up 一键起服务并完成初始化迁移
-- [ ] #2 凭证不进入镜像与仓库；配置可复现注入
-- [ ] #3 健康检查/日志/资源限制就绪
+- [x] #1 docker compose up 一键起服务并完成初始化迁移
+- [x] #2 凭证不进入镜像与仓库；配置可复现注入
+- [x] #3 健康检查/日志/资源限制就绪
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -59,3 +59,9 @@ ordinal: 23000
 
 复审修复（8 项 + nits）：① 引擎工厂仅对 PostgreSQL 注入 connect_timeout（修复 SQLite DSN 回归，补 2 项测试）；② 拆分角色文档改为「先 stop runtime 再按名启动 scheduler/worker」并实测通过；③ .env.example 行内注释改独立行（兼容 export 用法）；④ 配置手册子节编号修正 5.x；⑤ 资源限制措辞修正并给 migrate 加限制；⑥ migrations/env.py 复用引擎工厂（迁移亦继承连接超时）；⑦ dev 卷更名说明；⑧ 新增 POSTGRES_BIND/DEV_POSTGRES_BIND（默认不变）；nits：.dockerignore 补 egg-info/build、redis 命令断言精确化。验证：373 单测 + ruff/mypy 全绿；全栈/拆分/单机三种形态实测 healthy。
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Docker 交付落地：单镜像多入口（Dockerfile，非 root + 内置健康检查）；Compose 全栈编排（TimescaleDB + Redis + 一次性迁移 + Runtime，拆分角色经 profile）；一键启动自动迁移（001→002 实测）、健康检查 healthy、资源限制生效、镜像无凭证；dev 编排独立项目并端口退避（5432/15432 并存）。配套修复：readiness 连接超时（DATABASE_CONNECT_TIMEOUT）与迁移继承超时。验证：373 单测 + ruff/mypy；全栈/拆分/单机三形态实测。遗留：TimescaleDB DDL 告警治理 → TASK-3.20。
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -4,12 +4,13 @@ title: 采集调度与增量同步：定时 / 重试 / 补数 / 可观测
 status: To Do
 assignee: []
 created_date: '2026-09-13 06:01'
-updated_date: '2026-09-13 12:54'
+updated_date: '2026-09-14 12:25'
 labels: []
 milestone: m-0
 dependencies:
   - TASK-3.1
   - TASK-3.3
+  - TASK-3.18
 parent_task_id: TASK-3
 ordinal: 25000
 ---
@@ -31,4 +32,6 @@ ordinal: 25000
 
 <!-- SECTION:NOTES:BEGIN -->
 通知能力（2026-09-13，暂不制作）：调度/质量/新鲜度告警的主动通知见 doc-16（飞书等渠道）；首期不实现，依赖 WebUI 查看。
+
+依赖更新（2026-09-14）：按 doc-20 增加前置 TASK-3.18（FinDataRuntime 骨架）；调度作为 Runtime 的 Scheduler/Dispatcher 角色实现，不再独立造进程。
 <!-- SECTION:NOTES:END -->

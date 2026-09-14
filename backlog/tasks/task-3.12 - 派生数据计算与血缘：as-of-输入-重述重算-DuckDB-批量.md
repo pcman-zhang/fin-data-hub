@@ -4,12 +4,13 @@ title: 派生数据计算与血缘：as-of 输入 / 重述重算 / DuckDB 批量
 status: To Do
 assignee: []
 created_date: '2026-09-13 08:50'
-updated_date: '2026-09-14 04:40'
+updated_date: '2026-09-14 12:25'
 labels: []
 milestone: m-0
 dependencies:
   - TASK-3.2
   - TASK-3.3
+  - TASK-3.18
 parent_task_id: TASK-3
 ordinal: 33000
 ---
@@ -36,4 +37,6 @@ ordinal: 33000
 算法登记方案（2026-09-13，doc-11 §4）：派生指标代码实现 + @register(id, version)，字典登记 output/algorithm_id/implementation/owner/inputs/description；算法升级=新 algorithm_id（历史永久保留）；派生结果记录 algorithm_id 以审计回溯；CI 校验 id 唯一/实现可导入/docstring 含 Formula+PIT/inputs 存在。
 
 设计定稿（2026-09-13）：存输入与算法，不存多版本派生结果；algorithm_id 升级=新 id、旧实现永久保留（复现靠 pin+重算）；三种服务形态（读模型内联/按需计算/最新投影）；物化=可重建缓存（Cache Never Owns Data 延伸）；meta.algorithm_registry + algorithm_events。
+
+依赖更新（2026-09-14）：按 doc-20 增加前置 TASK-3.18（FinDataRuntime 骨架）；派生执行作为 Runtime 的 Derived Engine Executor 角色挂载，版本维度用 algorithm_id。
 <!-- SECTION:NOTES:END -->

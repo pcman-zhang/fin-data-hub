@@ -4,7 +4,7 @@ title: Entity Graph：issuer / relation / external_id / 分类面 / 读模型
 status: Done
 assignee: []
 created_date: '2026-09-14 06:33'
-updated_date: '2026-09-14 08:20'
+updated_date: '2026-09-14 08:30'
 labels: []
 dependencies: []
 parent_task_id: TASK-3
@@ -40,6 +40,16 @@ ordinal: 51000
 <!-- SECTION:NOTES:BEGIN -->
 验证证据：pytest 321 passed（8 deselected 集成）；ruff 全通过；mypy 56 文件无问题。分类面/词表/外部标识/universe 推导见 tests/test_platform_registry.py（22 用例）；读模型语义与 PG DDL 契约见 tests/test_platform_read_models.py；字典 CI（含 relation 词表对称、issuer_id 键）见 test_platform_dictionary.py / test_platform_storage.py。文档：doc-10 §3.3 状态更新，doc-17/19 由 dictionary.catalog_markdown / storage.report.database_markdown 重生成。
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @review
+created: 2026-09-14 08:30
+---
+代码复审（main...HEAD）发现 6 项问题，已于 9eedeca 全部修复：① 退市标的身份注册恢复（否则 listing_lifecycle 无法挂 entity_id、历史 as-of 幸存者偏差）；② ref.relation_type_dict schema/模型与字典 SCD2 声明对齐；③ universe 增加 knowledge_as_of 过滤与 tie-break；④ listing_lifecycle 字典登记两段区间构造规则；⑤ find_by_external_id 规整入参；⑥ SQLite 读模型改用 main + entity_asof 列限定。验证：323 测试 + ruff/mypy 全绿。
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

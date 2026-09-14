@@ -3,7 +3,7 @@ id: doc-10
 title: v1 平台架构总纲：分层与根本要求
 type: specification
 created_date: '2026-09-13 12:06'
-updated_date: '2026-09-13 14:54'
+updated_date: '2026-09-14 04:39'
 ---
 # v1 平台架构总纲：分层、概念与根本要求
 
@@ -72,17 +72,26 @@ updated_date: '2026-09-13 14:54'
    - 升版本 = 新旧并存过渡期 + 弃用公告；`_v1` 冻结后只增不改，移除字段须先弃用；
 4. Read Model 是**权威数据的投影**，非缓存：缓存只加速，不改变读取语义（§3.4）。
 
-### 3.3 引用注册表（Reference Registry；冻结稿修订 2026-09-13）
+### 3.3 引用注册表（Reference Registry / Entity Graph；冻结稿修订 2026-09-13）
 
-**定位**：注册表回答"数据说的是谁"——为可引用实体提供**稳定身份 + PIT 属性/生命周期**；不做源映射（归 Hub/字典）、不做数据目录（归字典）。
+**定位**：回答"数据说的是谁"——**实体身份、关系与外部标识**。不含交易状态（交易状态属数据集，PIT 事件驱动），不含数据目录（属字典），不含源映射（属 Hub/字典）。
 
-- **覆盖**：`instrument`（股票/ETF/LOF/基金/指数/期货/期权/债券/外汇对）、`series`（宏观/利率/EDB/另类时序，按需逐项接入）、`basket`（自编指数/组合/价差）；无实体数据不建实体。
-- **表结构（2 张，单表 + 类型标签 + JSONB 长尾）**：
-  - `ref.entity`：`entity_id`（稳定代理键）、`entity_type`、`code`（canonical WindCode）、`name`、`status`、`sec_type/currency/exchange/frequency/unit`、`list_date/delist_date`、`algorithm_id`、`valid_from/valid_to`（SCD2 闭区间）、`knowledge_time`、`version`、`attrs(JSONB)`；物理键 `(entity_id, valid_from, knowledge_time, version)`。
-  - `ref.entity_code_history`：canonical 代码履历（代码变更/复用 → 旧码仍可解析）；**替代原多源别名表**。
-- **不做**：每源别名表（证券源代码由 FinDataHub CodeMapper 机械归一；序列 vendor 码由字典 mappings 维护）。
-- **关键流程**：注册/刷新（Hub 基础信息 + delist_list + namechange）→ `resolve(code)`（含旧码）→ `universe(as_of)`（`list_date <= as_of < delist_date`）→ 属性 as-of 还原（SCD2 行）。
-- **待实施**：`security_id → entity_id` 改名、4 表 → 2 表、字典条目与实现同步（本轮执行）。
+- **覆盖（`entity_type`）**：`issuer / equity / etf / lof / fund / index / bond / future / option / rate / fx / macro / basket`；无实体数据不建实体。
+- **分类面（facets，替代 `sec_type`）**：
+  - `entity_type`：本体（粗）；
+  - `entity_class`：产品细分（`bond_etf / money_etf / reit / equity_index / commodity_future / …`）；
+  - `market`：市场面（`cn / hk / us / global`）。
+- **表结构（5 张）**：
+  - `ref.entity`：`entity_id`、`entity_type/entity_class/market`、`code`（canonical）、`name`、`currency/exchange`、`social_status`（**issuer 专用**：存续/倒闭/重整）、`algorithm_id`（basket）、`valid_from/valid_to`（SCD2 闭区间）、`knowledge_time/version`、`attrs(JSONB，治理留 v1.1)`；物理键 `(entity_id, valid_from, knowledge_time, version)`。
+  - `ref.entity_code_history`：canonical 代码履历（代码变更/复用 → 旧码仍可解析）。
+  - `ref.entity_relation`：`(entity_id, related_id, relation_type, valid_from/valid_to, knowledge_time, version)`；**单向存储**，双向查询由 `relation_type_dict.inverse_relation` 元数据驱动（零硬编码）。
+  - `ref.entity_external_id`：`(entity_id, id_type, id_value, valid_from/valid_to, knowledge_time, version)`；`id_type ∈ isin / figi / cusip / sedol / lei / uscc / other`（**不含 ticker**）。
+  - `ref.relation_type_dict`：关系词表（`relation_type / inverse_relation / description`）；新增关系词必须先登记（CI 校验）。
+- **Issuer 模型**：`listing --issued_by--> issuer`；`issuer.code` 采用统一社会信用代码（缺失时平台码）；**财务/股东/公司事件类数据集以 `issuer_id` 为键**，行情/成分/复权仍挂 listing。
+- **明确不做**：① 交易状态（上市/停牌/ST/退市）不在注册表——由交易状态数据集承载（`cn_equity.listing_lifecycle` + 事件接口 suspension/st），**PIT Universe 由数据集推导**；② `attrs` per-type schema 治理（v1.1）；③ Entity Graph 多跳遍历（v2）。
+- **读模型**：`mart.entity_latest_v1`（当前态视图）；as-of 用 `mart.entity_asof(ts)` 表函数或 SDK 构造器（PG 视图不可带参）；SDK/REST 只读 mart。
+- **关键流程**：注册/刷新（Hub 基础信息 + namechange 身份属性）→ `resolve(code)`（含旧码）→ `universe(as_of)`（**由生命周期/交易状态数据集推导**）→ 属性 as-of（SCD2）。
+- **待实施（TASK-3.15）**：分类面收敛、issuer、relation+字典、external_id、读模型、财务改挂 `issuer_id`、`cn_equity.listing_lifecycle` 数据集。
 
 ### 3.4 Cache 非权威原则（Cache Never Owns Data）
 
@@ -91,6 +100,26 @@ updated_date: '2026-09-13 14:54'
 3. 键必须 **PIT 安全**（含 as-of / 版本 / 口径维度），失效方式：代际失效 + 按域主动失效；
 4. **fail-open**：缓存不可用时直读权威层，正确性不受影响；
 5. SDK 直连 DB 模式不经 Redis（可选本地进程缓存）。
+
+### 3.5 派生引擎（Derived Engine；冻结稿修订 2026-09-13）
+
+**原则**：**存输入与算法，不存派生结果的多个版本**；派生输出最多保留"最新一份"可重建投影（缓存性质）。
+
+- **算法版本跟踪**（跟踪代码与元数据，不跟踪数据副本）：
+  - `algorithm_id`（升级 = 新 id，**旧实现永久保留**，代码便宜数据贵）；
+  - `meta.algorithm_registry`：id / version / owner / inputs / output / status(active|deprecated) / 生效日，由代码 `@register` 与字典生成（CI 一致）；
+  - **升级事件**（重述台账）：`algorithm_id / effective_from / reason`，WebUI 可见。
+- **三种服务形态**：
+
+| 形态 | 例子 | 存储 | 语义 |
+|---|---|---|---|
+| 读模型内联（字段级） | `qfq_close` | 0（视图计算） | as-of 输入 × 当前算法 |
+| 按需计算（引擎/API） | 自编指数、因子面板 | 0（可选 Redis） | 可 pin `algorithm_id` 复现 |
+| 最新投影（可选物化） | 重型派生 | **1 份、可重建** | 升级 → 全量重算 + 代次切换 |
+
+- **PIT 双维语义**：`as_of`（输入知识时点，防前视）× `algorithm_id`（默认当前 active；可 pin 旧版本做审计复现）；响应携带 `algorithm_id / inputs as_of / data_generation`。
+- **字典登记**：`derived` 增加 `materialize: none | latest`、`refresh: on_demand | scheduled`（doc-11 §4）。
+- **明确不做**：多版本派生数据副本（存储成本）；图算法与复杂因子编排（v2）。
 
 ## 4. PIT：四时间模型
 
@@ -114,7 +143,7 @@ updated_date: '2026-09-13 14:54'
 
 ### 4.3 PIT 三要素（缺一不可）
 
-1. **完整宇宙**：含退市标的（`list_date/delist_date`）；名称 / ST / 停牌 / 成分按生效区间留痕；
+1. **完整宇宙**：含退市标的；**universe 由交易状态数据集推导**（`cn_equity.listing_lifecycle` 上市/退市 + 停牌/ST 事件），名称变更（身份属性）在注册表按 SCD2 留痕；
 2. **区间与版本**：属性 SCD2、成分 in/out、财务 append-only 版本；
 3. **as-of 计算纪律**：复权价按 as-of 基准日由 raw + factor 计算（不落全量 qfq 快照）；派生数据以 as-of 输入计算并支持重述重算；**禁止前视 join**（按知识/发布时间过滤）。
 

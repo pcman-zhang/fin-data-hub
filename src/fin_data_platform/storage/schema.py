@@ -130,7 +130,7 @@ def timescale_statements(
             "SELECT create_hypertable("
             f"'{qualified}', '{partition_column}', "
             f"chunk_time_interval => INTERVAL '{storage.partition_interval}', "
-            "if_not_exists => TRUE);"
+            "migrate_data => TRUE, if_not_exists => TRUE);"
         )
         compression = storage.compression
         if compression is not None:

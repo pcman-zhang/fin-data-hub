@@ -78,6 +78,7 @@ def test_timescale_statements_by_partition_strategy() -> None:
     statements = timescale_statements(metadata, specs)
     joined = "\n".join(statements)
     assert "create_hypertable('cn_equity.daily_bar', 'trade_date'" in joined
+    assert "migrate_data => TRUE" in joined
     assert "INTERVAL '1 month'" in joined
     assert "compress_segmentby = 'entity_id'" in joined
     assert "add_compression_policy('cn_equity.daily_bar', INTERVAL '7 days'" in joined

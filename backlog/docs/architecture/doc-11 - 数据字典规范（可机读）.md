@@ -3,7 +3,7 @@ id: doc-11
 title: 数据字典规范（可机读）
 type: specification
 created_date: '2026-09-13 12:16'
-updated_date: '2026-09-13 12:45'
+updated_date: '2026-09-14 04:39'
 ---
 # 数据字典规范（可机读）
 
@@ -136,7 +136,7 @@ mappings:
 
 ## 4. 派生数据：代码实现 + 算法登记（无描述表达式）
 
-派生指标一律以**代码实现**（附结构化注释、性能可控、可测试），字典登记算法元数据：
+派生指标一律以**代码实现**（附结构化注释、性能可控、可测试），字典登记算法元数据；**不存多版本派生结果**（存储成本），最多保留"最新一份"可重建投影。
 
 ```yaml
 derived:
@@ -148,33 +148,22 @@ derived:
       - cn_equity.daily_bar.close
       - cn_equity.adj_factor.adj_factor
     description: 前复权收盘价
+    materialize: none          # none（按需计算/读模型内联）| latest（仅最新一份投影）
+    refresh: on_demand         # on_demand | scheduled
 ```
 
 规则：
 
-1. **`algorithm_id`**：稳定**审计标识**；算法升级 = **新增 id**（`pe_ttm_v1` → `pe_ttm_v2`、`barra_beta_v1` → `barra_beta_v2`），旧 id 与旧实现永久保留、可复现，禁止原地覆盖；
-2. **`implementation`**：可导入的代码路径；函数以注册装饰器声明 id/version（见下）；
-3. **`inputs`**：输入 `dataset.field`；as-of 语义与重算由派生引擎保证（TASK-3.12）；
-4. **不用描述型表达式**作为派生实现，避免"字典 DSL vs 代码"双轨；`quality.expression` 仅服务质量规则；
-5. **审计**：派生结果表记录 `algorithm_id`（+ 输入版本），任何数值可回溯至具体算法版本与输入版本。
+1. **`algorithm_id`**：稳定**审计标识**；算法升级 = **新增 id**（`pe_ttm_v1` → `pe_ttm_v2`），旧 id 与旧实现**永久保留**、可复现，禁止原地覆盖；
+2. **`implementation`**：可导入的代码路径；`@register(id, version)` 注册；`meta.algorithm_registry` 由代码与字典生成（id/version/owner/inputs/output/status/生效日，CI 一致）；升级记录事件（effective_from/reason）；
+3. **`inputs`**：输入 `dataset.field`；as-of 语义由引擎保证（TASK-3.12）；
+4. **`materialize`**：`none`（默认，0 存储：读模型内联或按需计算）｜`latest`（**仅一份**可重建投影，升级→全量重算+代次切换；投影视为缓存，符合 Cache Never Owns Data）；
+5. **`refresh`**：`on_demand`（默认）｜`scheduled`（随调度任务刷新）；
+6. **不用描述型表达式**作为派生实现；`quality.expression` 仅服务质量规则；
+7. **PIT 双维**：`as_of`（输入时点）× `algorithm_id`（默认 active，可 pin 复现）；响应携带 `algorithm_id / inputs as_of / data_generation`；
+8. **审计**：派生结果记录 `algorithm_id`（物化投影列/响应元数据），任何数值可回溯到算法版本与输入版本。
 
-代码侧约定（三者统一：字典元数据 / 注册表 / docstring）：
-
-```python
-@register(id="qfq_close_v1", version=1)
-def qfq_close(close, adj_factor):
-    """前复权收盘价
-
-    Formula:
-        close * factor / latest_factor
-    PIT:
-        knowledge_time
-    Notes:
-        不落快照；as-of 实时计算
-    """
-```
-
-CI 校验：`algorithm_id` 全局唯一且不复用；`implementation` 可导入；docstring 含 `Formula`/`PIT` 段落；`inputs` 存在；历史 id 不得删除。
+CI 校验：`algorithm_id` 全局唯一且不复用；`implementation` 可导入；docstring 含 `Formula/PIT`；`inputs` 存在；`materialize/refresh` 取值合法；历史 id 不得删除。
 
 ## 5. 完整示例：`cn_equity.daily_bar`
 

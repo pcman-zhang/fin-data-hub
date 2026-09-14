@@ -3,7 +3,7 @@ id: doc-18
 title: 代码与标识体系标准（方向）
 type: specification
 created_date: '2026-09-13 14:44'
-updated_date: '2026-09-13 14:44'
+updated_date: '2026-09-14 01:00'
 ---
 # 代码与标识体系标准（方向）
 
@@ -30,9 +30,9 @@ updated_date: '2026-09-13 14:44'
 
 ## 3. 注册表范围（与 doc-10 §3.3 一致）
 
-- **entity 注册表**：身份锚点 + PIT 属性/生命周期（名称/ST/退市/频率/单位）；
-- 不承担"每源别名"（证券由 Hub mapper 解决；序列映射是定义数据，登记字典）；
-- 宏观/序列注册表在接入时随条目建立。
+- **entity 注册表（Entity Graph）**：身份（entity_id/code/name/分类面）+ 关系（entity_relation，单向存储 + inverse 字典驱动双向查询）+ 外部标识（ISIN/FIGI 等）+ 社会实体状态（issuer 专用）；
+- **交易状态不在注册表**：上市/停牌/ST/退市由交易状态数据集承载（`listing_lifecycle` + suspension/st 事件），**PIT Universe 由数据集推导**；
+- 不承担"每源别名"（证券由 Hub mapper 解决；序列映射是定义数据，登记字典）；宏观/序列注册表在接入时随条目建立。
 
 ## 4. 宏观/序列接入策略（本期不接）
 

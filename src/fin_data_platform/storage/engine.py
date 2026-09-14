@@ -22,6 +22,7 @@ def ensure_schema(
     *,
     config: StorageConfig | None = None,
     metadata=None,
+    specs=None,
 ) -> list[str]:
     """创建 schema/表（幂等）；PostgreSQL + TimescaleDB 时追加 hypertable/压缩语句。
 
@@ -29,8 +30,10 @@ def ensure_schema(
     """
     if metadata is None:
         metadata, specs = build_metadata()
-    else:
-        specs = {}
+    elif specs is None:
+        from fin_data_platform.dictionary import load_all
+
+        specs = load_all()
     executed: list[str] = []
     schemas = sorted(
         {table.schema for table in metadata.tables.values() if table.schema}

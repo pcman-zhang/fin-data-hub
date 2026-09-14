@@ -33,6 +33,7 @@ def as_of_query(
     key_columns: Sequence[str],
     knowledge_column: str = "knowledge_time",
     version_column: str = "version",
+    filters: Sequence[Any] = (),
 ) -> Select[Any]:
     """返回 ``knowledge_time <= as_of`` 且每个**业务键**取最新版本的查询。
 
@@ -40,11 +41,10 @@ def as_of_query(
     用于版本分组——不能使用物理键（物理键含版本维度）。
     """
     rank = _ranked(table, key_columns, knowledge_column, version_column)
-    subquery = (
-        select(*table.c, rank)
-        .where(table.c[knowledge_column] <= as_of)
-        .subquery()
-    )
+    statement = select(*table.c, rank).where(table.c[knowledge_column] <= as_of)
+    if filters:
+        statement = statement.where(*filters)
+    subquery = statement.subquery()
     return select(
         *[subquery.c[column.name] for column in table.c]
     ).where(subquery.c._rank == 1)
@@ -56,10 +56,14 @@ def latest_query(
     key_columns: Sequence[str],
     knowledge_column: str = "knowledge_time",
     version_column: str = "version",
+    filters: Sequence[Any] = (),
 ) -> Select[Any]:
     """返回每个**业务键**的最新版本（读侧派生，不落列）。"""
     rank = _ranked(table, key_columns, knowledge_column, version_column)
-    subquery = select(*table.c, rank).subquery()
+    statement = select(*table.c, rank)
+    if filters:
+        statement = statement.where(*filters)
+    subquery = statement.subquery()
     return select(
         *[subquery.c[column.name] for column in table.c]
     ).where(subquery.c._rank == 1)

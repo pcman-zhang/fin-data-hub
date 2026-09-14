@@ -22,12 +22,25 @@ def append_rows(
     if not rows:
         return 0
     dialect = connection.dialect.name
+    pk_column = next(iter(table.primary_key.columns))
     statement: Insert
     if dialect == "postgresql":
-        statement = pg_insert(table).values(list(rows)).on_conflict_do_nothing()
+        statement = (
+            pg_insert(table)
+            .values(list(rows))
+            .on_conflict_do_nothing()
+            .returning(pk_column)
+        )
     elif dialect == "sqlite":
-        statement = sqlite_insert(table).values(list(rows)).on_conflict_do_nothing()
+        statement = (
+            sqlite_insert(table)
+            .values(list(rows))
+            .on_conflict_do_nothing()
+            .returning(pk_column)
+        )
     else:
         statement = insert(table).values(list(rows))
     result = connection.execute(statement)
+    if result.returns_rows:
+        return len(result.fetchall())
     return int(result.rowcount or 0)

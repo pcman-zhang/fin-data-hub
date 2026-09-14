@@ -418,6 +418,23 @@ def test_entrypoint_rejects_unknown_role() -> None:
         main(["--role", "unknown"])
 
 
+def test_entrypoint_check_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ("FDP_SYNC_CODES", "FDP_SYNC_START", "FDP_SYNC_SOURCE", "FDP_SYNC_SCHEDULE"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("DATABASE_USER", "u")
+    monkeypatch.setenv("DATABASE_PASSWORD", "p")
+    monkeypatch.setenv("DATABASE_HOST", "127.0.0.1")
+    monkeypatch.setenv("DATABASE_PORT", "1")
+    # 连接超时兜底：网络不可达时快速失败（不无限挂起）
+    monkeypatch.setenv("DATABASE_CONNECT_TIMEOUT", "1")
+    assert main(["--check"]) == 1
+
+    # 配置非法优先于就绪检查（退出码 2）
+    monkeypatch.setenv("FDP_SYNC_CODES", "600519.SH")
+    monkeypatch.setenv("FDP_SYNC_START", "2026-09-01")
+    assert main(["--check"]) == 2
+
+
 # ------------------------------------------------------------------ 复审回归
 def test_replay_after_dead_restarts_attempt_budget() -> None:
     repo = InMemoryMetaRepository()

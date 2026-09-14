@@ -1,0 +1,20 @@
+# 构建上下文裁剪：凭证、开发资产与历史不入镜像
+.git
+.gitignore
+.env
+.venv
+__pycache__
+*.py[cod]
+*.egg-info
+build
+.coverage
+.pytest_cache
+.mypy_cache
+.ruff_cache
+docs
+backlog
+tests
+docker-compose*.yml
+Dockerfile
+*.md
+!README.md

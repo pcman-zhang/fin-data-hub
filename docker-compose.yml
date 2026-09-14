@@ -1,0 +1,153 @@
+# 全栈编排：TimescaleDB + Redis + 一次性迁移 + Runtime（单镜像多入口）。
+#
+# 使用：
+#   cp .env.example .env        # 填写 POSTGRES_PASSWORD / DATABASE_*（.env 不入库）
+#   docker compose up -d        # 数据库 → 迁移 → Runtime（role=all）
+#   docker compose logs -f runtime
+#
+# 拆分角色（多进程调度/执行，仅凭数据库协调）：
+#   docker compose stop runtime                                  # 先停单机进程
+#   docker compose --profile split up -d runtime-scheduler runtime-worker
+#
+# 说明：
+#   - 迁移由一次性服务执行，Runtime 等待其成功后再启动（避免多角色竞争迁移）；
+#   - 凭证一律经环境变量注入，不进入镜像与仓库；
+#   - Redis 为缓存层基础设施（非权威、可清空；当前无持久化，接入见后续）；
+#   - 日志滚动上限与资源限制见各服务配置。
+name: fin-data-platform
+
+x-db-env: &db-env
+  DATABASE_HOST: timescaledb
+  DATABASE_PORT: "5432"
+  DATABASE_USER: ${DATABASE_USER:?请在 .env 设置 DATABASE_USER}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD:?请在 .env 设置 DATABASE_PASSWORD}
+  DATABASE_NAME: ${DATABASE_NAME:-fin_data_platform}
+  DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5}
+
+x-app-env: &app-env
+  <<: *db-env
+  FDP_SYNC_CODES: ${FDP_SYNC_CODES:-}
+  FDP_SYNC_START: ${FDP_SYNC_START:-}
+  FDP_SYNC_SOURCE: ${FDP_SYNC_SOURCE:-}
+  FDP_SYNC_SCHEDULE: ${FDP_SYNC_SCHEDULE:-}
+  TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-image: &app-image
+  image: fin-data-platform:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fdp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-fin_data_platform}
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    ports:
+      # 默认对所有接口开放；仅本机访问可设 POSTGRES_BIND=127.0.0.1
+      - "${POSTGRES_BIND:-0.0.0.0}:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-fdp} -d ${POSTGRES_DB:-fin_data_platform}
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # 缓存非权威：不持久化（可清空后由权威层重建）
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - volatile-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    logging: *logging
+
+  migrate:
+    <<: *app-image
+    restart: "no"
+    command:
+      - python
+      - -c
+      - "from fin_data_platform.storage.migrations import upgrade; upgrade()"
+    environment: *db-env
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *logging
+
+  runtime:
+    <<: *app-image
+    restart: unless-stopped
+    command: ["python", "-m", "fin_data_platform.runtime", "--role", "all"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    mem_limit: 1g
+    cpus: 1.5
+    logging: *logging
+
+  # ---------------------------------------------------------------- 拆分角色
+  runtime-scheduler:
+    <<: *app-image
+    profiles: ["split"]
+    restart: unless-stopped
+    command: ["python", "-m", "fin_data_platform.runtime", "--role", "scheduler"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *logging
+
+  runtime-worker:
+    <<: *app-image
+    profiles: ["split"]
+    restart: unless-stopped
+    command: ["python", "-m", "fin_data_platform.runtime", "--role", "worker"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    mem_limit: 1g
+    cpus: 1.0
+    logging: *logging
+
+volumes:
+  timescaledb-data:

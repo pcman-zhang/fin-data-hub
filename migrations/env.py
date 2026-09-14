@@ -6,9 +6,10 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import pool
 
 from fin_data_platform.storage.config import StorageConfig
+from fin_data_platform.storage.engine import create_write_engine
 from fin_data_platform.storage.schema import build_metadata
 
 config = context.config
@@ -44,7 +45,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = create_engine(_database_url(), poolclass=pool.NullPool)
+    connectable = create_write_engine(
+        StorageConfig(write_dsn=_database_url()), poolclass=pool.NullPool
+    )
     with connectable.connect() as connection:
         context.configure(
             connection=connection,

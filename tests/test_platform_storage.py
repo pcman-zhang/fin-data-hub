@@ -201,3 +201,42 @@ def test_as_of_and_latest_queries(engine) -> None:
     assert len(early) == 1 and float(early[0]["close"]) == 10.0
     assert len(late) == 1 and float(late[0]["close"]) == 12.0
     assert len(latest) == 1 and float(latest[0]["close"]) == 12.0
+
+
+# ------------------------------------------------------------------ 引擎工厂
+def test_engine_factory_accepts_sqlite_dsn() -> None:
+    """SQLite 等后端不受 connect_timeout 影响（回归：非 PG 后端不可注入该参数）。"""
+    from fin_data_platform.storage.config import StorageConfig
+    from fin_data_platform.storage.engine import create_read_engine, create_write_engine
+
+    write_engine = create_write_engine(
+        StorageConfig(write_dsn="sqlite+pysqlite:///:memory:")
+    )
+    with write_engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT 1").scalar() == 1
+    write_engine.dispose()
+
+    read_engine = create_read_engine(
+        StorageConfig(write_dsn="sqlite+pysqlite:///:memory:")
+    )
+    with read_engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT 1").scalar() == 1
+    read_engine.dispose()
+
+
+def test_storage_config_connect_timeout_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fin_data_platform.storage.config import StorageConfig
+
+    monkeypatch.setenv("DATABASE_USER", "u")
+    monkeypatch.setenv("DATABASE_PASSWORD", "p")
+    monkeypatch.setenv("DATABASE_HOST", "db")
+    monkeypatch.setenv("DATABASE_CONNECT_TIMEOUT", "1.5")
+    assert StorageConfig.from_env().connect_timeout == 1.5
+
+    monkeypatch.setenv("DATABASE_CONNECT_TIMEOUT", "abc")
+    with pytest.raises(ValueError, match="CONNECT_TIMEOUT"):
+        StorageConfig.from_env()
+
+    monkeypatch.setenv("DATABASE_CONNECT_TIMEOUT", "0")
+    with pytest.raises(ValueError, match="CONNECT_TIMEOUT"):
+        StorageConfig.from_env()

@@ -4,7 +4,7 @@ title: 采集调度与增量同步：定时 / 重试 / 补数 / 可观测
 status: In Progress
 assignee: []
 created_date: '2026-09-13 06:01'
-updated_date: '2026-09-14 13:16'
+updated_date: '2026-09-14 13:45'
 labels: []
 milestone: m-0
 dependencies:
@@ -57,5 +57,11 @@ author: @review
 created: 2026-09-14 13:16
 ---
 切片 1 复审修复（6 项，全部落地）：① entity_id 分配改全局 advisory lock（不同代码并发曾会分到相同 id，且 daily_bar 冲突静默丢行；新增 PG 并发唯一性回归测试）；② 实现修订语义（值变化→新版本 knowledge_time=修订时刻，历史保留；值未变不写），不再依赖 ON CONFLICT 静默跳过；③ 集成测试改为增量断言 + 清理本 job 运行记录，可重复执行（已连跑两次）；④ build_metadata 进程内缓存（_daily_bar_table）；⑤ registry/__init__ 不再导出 store（避免 registry 包引入 SQLAlchemy 硬依赖）；⑥ 任务执行改用注册 code 并校验 scope 不一致即报错。验证：356 单测 + 10 PG 集成（含并发分配、修订、扩窗补数）+ ruff/mypy 全绿。
+---
+
+author: @review
+created: 2026-09-14 13:45
+---
+切片 2 复审修复（8 项，全部落地）：① cron 触发器显式 timezone=UTC（此前默认本地时区）；② 新增 advance_watermark 单调推进（乱序/补数窗口不回退水位）；③ 调度判定截止改为 16:30 CST（08:30 UTC，等源端发布），并对「窗口末日=今日且零行」保留今日待重试（防缺口永不回补）；④ 混合注册表：未配置 schedule 的任务仍由轮询线程处理（Scheduler.run 增加 only 过滤）；⑤ APScheduler 模式 scheduler health 补齐（alive/last_tick/intents/last_error）；⑥ 启动时 reconcile 清理 job store 陈旧注册；⑦ 集成测试水位断言改为单调语义 + succeeded/水位双双就绪等待；⑧ on_success 第三参类型收紧为 MetaRepository（去掉 type: ignore）。验证：363 单测 + 11 PG 集成（sync 文件连跑 2 次、调度文件连跑 6 次全绿）+ ruff/mypy 全绿。
 ---
 <!-- COMMENTS:END -->

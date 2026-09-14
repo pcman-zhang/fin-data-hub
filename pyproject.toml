@@ -27,6 +27,7 @@ platform = [
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "psycopg[binary]>=3.2",
+    "apscheduler>=3.10,<4",
 ]
 dev = [
     "pytest>=8.0",
@@ -39,6 +40,7 @@ dev = [
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "psycopg[binary]>=3.2",
+    "apscheduler>=3.10,<4",
 ]
 
 [tool.setuptools.dynamic]
@@ -80,5 +82,5 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 packages = ["fin_data_hub", "fin_data_platform"]
 
 [[tool.mypy.overrides]]
-module = ["tushare.*", "akshare.*", "baostock.*", "yaml.*"]
+module = ["tushare.*", "akshare.*", "baostock.*", "yaml.*", "apscheduler.*"]
 ignore_missing_imports = true

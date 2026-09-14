@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from fin_data_platform.runtime.keys import VERSIONED_KINDS
 from fin_data_platform.runtime.models import (
@@ -19,6 +20,9 @@ from fin_data_platform.runtime.models import (
     JobRun,
     JobStatus,
 )
+
+if TYPE_CHECKING:
+    from fin_data_platform.runtime.repository import MetaRepository
 
 #: 执行器：接收运行上下文，返回执行结果
 JobExecutor = Callable[["JobContext"], "JobResult"]
@@ -71,6 +75,8 @@ class TaskSpec:
     condition: str = DependencyCondition.ON_SUCCESS.value
     #: 版本维度提供者：derive → algorithm_id；build_rm → 读模型 semantic_version
     version_provider: Callable[[], str | None] | None = None
+    #: 成功回调（如更新水位）：``(context, result, repository) -> None``
+    on_success: Callable[[JobContext, JobResult, MetaRepository], None] | None = None
 
 
 class TaskRegistry:
@@ -98,6 +104,7 @@ class TaskRegistry:
         dependencies: tuple[str, ...] = (),
         condition: str = DependencyCondition.ON_SUCCESS.value,
         version_provider: Callable[[], str | None] | None = None,
+        on_success: Callable[[JobContext, JobResult, MetaRepository], None] | None = None,
     ) -> Callable[[JobExecutor], JobExecutor]:
         """装饰器形式注册任务。"""
 
@@ -115,6 +122,7 @@ class TaskRegistry:
                     dependencies=dependencies,
                     condition=condition,
                     version_provider=version_provider,
+                    on_success=on_success,
                 )
             )
             return executor

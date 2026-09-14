@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import Engine
 
 from fin_data_platform.ingestion.daily_bar import DATASET, sync_daily_bar
+from fin_data_platform.runtime._util import utcnow
 from fin_data_platform.runtime.models import JobKind
 from fin_data_platform.runtime.registry import (
     JobContext,
@@ -14,6 +16,7 @@ from fin_data_platform.runtime.registry import (
     TaskRegistry,
     TaskSpec,
 )
+from fin_data_platform.runtime.repository import MetaRepository
 
 
 def register_daily_bar_task(
@@ -27,8 +30,11 @@ def register_daily_bar_task(
     priority: int = 100,
     max_attempts: int = 3,
 ) -> TaskSpec:
-    """注册单标的日线同步任务（``scope=code``；窗口由调度或手动意图提供）。"""
-    job_id = f"sync.{DATASET}.{code}"
+    """注册单标的日线同步任务（``scope=code``；窗口由调度或手动意图提供）。
+
+    ``schedule`` 为 cron（5 段，UTC）或 ``interval:<秒>``；成功后自动推进水位
+    （``meta.watermarks``），供断点续传/补数（窗口 = 水位+1 ~ 最近已收盘交易日）。
+    """
 
     def executor(context: JobContext) -> JobResult:
         if context.window_start is None or context.window_end is None:
@@ -47,9 +53,24 @@ def register_daily_bar_task(
         )
         return JobResult(rows_written=result.rows_written)
 
+    def mark_watermark(
+        context: JobContext, result: JobResult, repository: MetaRepository
+    ) -> None:
+        if context.window_end is None:
+            return
+        target = context.window_end
+        # 窗口末日即今日且无数据：源端可能尚未发布 → 保留今日待下轮重试（防缺口永不回补）
+        if target >= utcnow().date() and (result.rows_written or 0) == 0:
+            target = target - timedelta(days=1)
+        repository.advance_watermark(
+            DATASET,
+            scope=code,
+            watermark_time=datetime.combine(target, time(0, 0)),
+        )
+
     return registry.register(
         TaskSpec(
-            job_id=job_id,
+            job_id=f"sync.{DATASET}.{code}",
             kind=JobKind.SYNC.value,
             dataset=DATASET,
             executor=executor,
@@ -57,5 +78,6 @@ def register_daily_bar_task(
             priority=priority,
             max_attempts=max_attempts,
             scope=code,
+            on_success=mark_watermark,
         )
     )

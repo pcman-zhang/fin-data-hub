@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import os
 import threading
-from datetime import date
+from datetime import date, datetime, time
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import create_engine, delete, func, select, text
 from sqlalchemy.engine import Engine
 
 from fin_data_platform.ingestion import register_daily_bar_task, sync_daily_bar
@@ -50,7 +50,9 @@ def engine() -> Engine:
     engine.dispose()
 
 
-def _hub():
+@pytest.fixture(scope="module")
+def market_hub():
+    """模块级共享 Hub：TTL 缓存跨测试复用，减少源端调用（限流友好）。"""
     from fin_data_hub import FinDataHub, HubConfig, Source
     from fin_data_hub.config import TushareConfig
 
@@ -74,8 +76,8 @@ def _count(engine: Engine, code: str) -> int:
         )
 
 
-def test_single_symbol_sync_experiment(engine: Engine) -> None:
-    hub, source = _hub()
+def test_single_symbol_sync_experiment(engine: Engine, market_hub) -> None:
+    hub, source = market_hub
     before = _count(engine, CODE)
 
     first = sync_daily_bar(
@@ -133,6 +135,11 @@ def test_single_symbol_sync_experiment(engine: Engine) -> None:
     assert runs[0].rows_written is not None
     assert _count(engine, CODE) == before_run + int(runs[0].rows_written)
 
+    # 水位推进（切片 2）：单调推进，不低于本窗口末（历史运行可能已推进更高）
+    mark = repo.get_watermark("cn_equity.daily_bar", scope=CODE)
+    assert mark is not None and mark.watermark_time is not None
+    assert mark.watermark_time.date() >= SECOND_WINDOW[1]
+
 
 def test_concurrent_entity_allocation_is_unique(engine: Engine) -> None:
     """不同代码并发注册必须拿到不同 entity_id（全局分配锁回归）。"""
@@ -165,3 +172,73 @@ def test_concurrent_entity_allocation_is_unique(engine: Engine) -> None:
         connection.execute(
             delete(entity_code_history).where(entity_code_history.c.code.in_(codes))
         )
+
+
+def test_apscheduler_on_postgres(engine: Engine, market_hub) -> None:
+    """APScheduler + PG job store：启动追平、水位推进、调度注册持久化。"""
+    from time import monotonic
+
+    from fin_data_platform.runtime import HubTradeCalendar, WatermarkWindowProvider
+
+    hub, source = market_hub
+    registry = TaskRegistry()
+    spec = register_daily_bar_task(
+        registry, engine, hub, code=CODE, source=source, schedule="interval:1"
+    )
+    repo = SqlMetaRepository(engine)
+    calendar = HubTradeCalendar(hub, source=source)
+    provider = WatermarkWindowProvider(
+        repo, calendar, start_dates={spec.job_id: SECOND_WINDOW[0]}
+    )
+    config = RuntimeConfig(
+        storage=StorageConfig.from_env(
+            host_override=os.environ.get("FDP_DATABASE_HOST")
+        ),
+        role="all",
+        worker_count=1,
+    )
+    # 重置水位到固定起点：窗口确定（水位+1 ~ 最近已收盘交易日）
+    repo.set_watermark(
+        "cn_equity.daily_bar",
+        scope=CODE,
+        watermark_time=datetime.combine(SECOND_WINDOW[0], time(0, 0)),
+    )
+    with engine.begin() as connection:
+        connection.execute(delete(job_runs).where(job_runs.c.job_id == spec.job_id))
+
+    app = RuntimeApp(
+        config, engine=engine, repository=repo, registry=registry, due_provider=provider
+    )
+    app.start()
+    try:
+        deadline = monotonic() + 30
+        finished = None
+        while monotonic() < deadline:
+            runs = repo.list_runs(job_id=spec.job_id)
+            if runs and runs[0].status in ("succeeded", "failed", "dead"):
+                finished = runs[0]
+                break
+            from time import sleep
+
+            sleep(0.2)
+        assert finished is not None, "APScheduler 追平未在超时内结束"
+        if finished.status != "succeeded":
+            pytest.fail(f"APScheduler 追平任务失败: {finished.status} / {finished.error}")
+        mark = repo.get_watermark("cn_equity.daily_bar", scope=CODE)
+        assert mark is not None and mark.watermark_time is not None
+        assert finished.window_end is not None
+        # 单调推进：水位越过起点且不超过窗口末；窗口末日无数据时保留今日（hold 规则）
+        assert mark.watermark_time.date() > SECOND_WINDOW[0]
+        assert mark.watermark_time.date() <= finished.window_end
+        if finished.rows_written:
+            assert mark.watermark_time.date() == finished.window_end
+    finally:
+        app.stop(timeout=3.0)
+
+    # 调度注册持久化（PG job store）
+    with engine.begin() as connection:
+        jobs = connection.execute(
+            text("select count(*) from apscheduler_jobs where id = :id"),
+            {"id": spec.job_id},
+        ).scalar_one()
+    assert int(jobs) == 1

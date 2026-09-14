@@ -49,6 +49,13 @@ from fin_data_platform.runtime.schema import (
 RETRY_BACKOFF_SECONDS = 5
 
 
+def _naive(value: datetime | None) -> datetime | None:
+    """统一为 naive（PG timestamptz 返回 aware，本地写入用 naive）。"""
+    if value is not None and value.tzinfo is not None:
+        return value.replace(tzinfo=None)
+    return value
+
+
 def _row_to_run(row: RowMapping) -> JobRun:
     return JobRun(
         run_id=int(row["run_id"]),
@@ -123,6 +130,10 @@ class MetaRepository(Protocol):
     def get_watermark(self, dataset: str, scope: str = "") -> Watermark | None: ...
 
     def set_watermark(
+        self, dataset: str, *, scope: str = "", watermark_time: datetime
+    ) -> Watermark: ...
+
+    def advance_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime
     ) -> Watermark: ...
 
@@ -370,9 +381,29 @@ class InMemoryMetaRepository:
             self._watermarks[(dataset, scope)] = mark
             return mark
 
+    def advance_watermark(
+        self, dataset: str, *, scope: str = "", watermark_time: datetime
+    ) -> Watermark:
+        """单调推进水位（不回退；乱序/补数窗口不得使覆盖范围倒退）。"""
+        with self._lock:
+            current = self._watermarks.get((dataset, scope))
+            if (
+                current is not None
+                and current.watermark_time is not None
+                and current.watermark_time >= watermark_time
+            ):
+                return current
+            return self.set_watermark(
+                dataset, scope=scope, watermark_time=watermark_time
+            )
+
 
 class SqlMetaRepository:
-    """``meta.*`` SQL 实现（State 权威）。"""
+    """``meta.*`` SQL 实现（State 权威）。
+
+    并发说明：多线程/多进程 Runtime 请使用 PostgreSQL（advisory lock + ``SKIP
+    LOCKED``）；SQLite 仅用于单线程测试（共享内存连接不支持并发访问）。
+    """
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
@@ -733,6 +764,49 @@ class SqlMetaRepository:
                 )
             ).scalar_one_or_none()
             if existing is None:
+                connection.execute(
+                    insert(watermarks).values(
+                        dataset=dataset,
+                        scope=scope,
+                        watermark_time=watermark_time,
+                        updated_at=now,
+                    )
+                )
+            else:
+                connection.execute(
+                    update(watermarks)
+                    .where(
+                        and_(
+                            watermarks.c.dataset == dataset,
+                            watermarks.c.scope == scope,
+                        )
+                    )
+                    .values(watermark_time=watermark_time, updated_at=now)
+                )
+        return Watermark(dataset=dataset, scope=scope, watermark_time=watermark_time)
+
+    def advance_watermark(
+        self, dataset: str, *, scope: str = "", watermark_time: datetime
+    ) -> Watermark:
+        """单调推进水位（仅当新值更大时写入）。"""
+        now = utcnow()
+        with self._engine.begin() as connection:
+            current = connection.execute(
+                select(watermarks.c.watermark_time).where(
+                    and_(
+                        watermarks.c.dataset == dataset,
+                        watermarks.c.scope == scope,
+                    )
+                )
+            ).scalar_one_or_none()
+            current_naive = _naive(current)
+            if current_naive is not None and current_naive >= watermark_time:
+                return Watermark(
+                    dataset=dataset,
+                    scope=scope,
+                    watermark_time=current,
+                )
+            if current is None:
                 connection.execute(
                     insert(watermarks).values(
                         dataset=dataset,

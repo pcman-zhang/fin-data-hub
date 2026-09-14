@@ -293,6 +293,16 @@ config = HubConfig(
 
 ## 开发
 
+仓库结构：
+
+```
+src/fin_data_hub/        接入层（数据源适配、限流、缓存）
+src/fin_data_platform/   平台层（dictionary / registry / storage）
+migrations/              Alembic 迁移（基线由数据字典生成）
+tests/                   单元测试与集成测试（-m integration）
+backlog/                 任务与设计文档（Backlog.md CLI 管理）
+```
+
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev,platform,tushare,akshare,ifind,wind,fuyao,baostock]"

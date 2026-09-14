@@ -17,7 +17,11 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, text
 
 from fin_data_platform.storage import StorageConfig
-from fin_data_platform.storage.migrations import BASELINE_REVISION, downgrade, upgrade
+from fin_data_platform.storage.migrations import (
+    downgrade,
+    expected_head_revision,
+    upgrade,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -86,16 +90,18 @@ def test_upgrade_downgrade_repeatable(dsn: str) -> None:
     downgrade(dsn, "base")  # 清理上次运行残留（无版本表时为 no-op）
     assert _current_revision(dsn) is None
 
+    head = expected_head_revision(dsn)
     upgrade(dsn, "head")
-    assert _current_revision(dsn) == BASELINE_REVISION
+    assert _current_revision(dsn) == head
     assert _table_count(dsn, "cn_equity") >= 5
+    assert _table_count(dsn, "meta") >= 4  # 修订 0002：Runtime 控制面
     assert _hypertable_count(dsn) >= 3
     # doc-13 §4：业务索引随基线落地（ref 四索引 + cn_equity business 索引）
     assert _index_count(dsn, "ref") >= 4
     assert _index_count(dsn, "cn_equity") >= 5
 
     upgrade(dsn, "head")  # 幂等：重复升级 no-op
-    assert _current_revision(dsn) == BASELINE_REVISION
+    assert _current_revision(dsn) == head
 
     downgrade(dsn, "base")
     assert _current_revision(dsn) is None
@@ -105,4 +111,4 @@ def test_upgrade_downgrade_repeatable(dsn: str) -> None:
     assert _current_revision(dsn) is None
 
     upgrade(dsn, "head")  # 回滚后可再次升级
-    assert _current_revision(dsn) == BASELINE_REVISION
+    assert _current_revision(dsn) == head

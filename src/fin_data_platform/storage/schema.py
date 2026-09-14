@@ -56,8 +56,13 @@ def _table_name(spec: DatasetSpec) -> str:
     return spec.storage.canonical_table.split(".", 1)[1]
 
 
-def build_metadata(root: Path | None = None) -> tuple[MetaData, dict[str, DatasetSpec]]:
-    """按字典构建全量 schema（含 ref 参照表）。"""
+def build_metadata(
+    root: Path | None = None, *, include_runtime: bool = True
+) -> tuple[MetaData, dict[str, DatasetSpec]]:
+    """按字典构建全量 schema（含 ref 参照表；``include_runtime`` 控制 meta 控制面表）。
+
+    基线迁移（修订 0001）不含 meta（由修订 0002 创建）；本地建库与文档使用全量。
+    """
     specs = load_all(root or DEFAULT_ROOT)
     metadata = MetaData()
     for dataset, spec in sorted(specs.items()):
@@ -97,6 +102,13 @@ def build_metadata(root: Path | None = None) -> tuple[MetaData, dict[str, Datase
                 *(target.c[column.name] for column in index.columns),
                 unique=index.unique,
             )
+    if include_runtime:
+        # 延迟导入：runtime 包依赖 storage（health 等），避免模块级循环
+        from fin_data_platform.runtime.schema import metadata as runtime_metadata
+
+        for table in runtime_metadata.tables.values():
+            if table.key not in metadata.tables:
+                table.to_metadata(metadata)
     return metadata, specs
 
 

@@ -55,11 +55,8 @@ CAPABILITIES: dict[tuple[Source, Capability], EndpointCapability] = {
     (Source.TUSHARE, Capability.MARKET_EVENTS): EndpointCapability(
         max_codes_per_call=None, cost_class="free"
     ),
-    # AkShare：各接口均为单标的形式
+    # AkShare：各接口均为单标的形式；不支持快照（快照能力由 Fuyao 主力提供，Wind 亦具备）
     (Source.AKSHARE, Capability.BARS): EndpointCapability(
-        max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
-    ),
-    (Source.AKSHARE, Capability.SNAPSHOT): EndpointCapability(
         max_codes_per_call=1, supports_multi_symbol=False, cost_class="free"
     ),
     (Source.AKSHARE, Capability.FUND_NAV): EndpointCapability(

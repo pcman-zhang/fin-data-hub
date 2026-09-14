@@ -3,7 +3,7 @@ id: doc-11
 title: 数据字典规范（可机读）
 type: specification
 created_date: '2026-09-13 12:16'
-updated_date: '2026-09-14 14:23'
+updated_date: '2026-09-14 14:44'
 ---
 # 数据字典规范（可机读）
 
@@ -89,7 +89,7 @@ platform/dictionary/
 ```yaml
 coverage:
   universe: A 股（含退市）
-  universe_source: cn_equity.security_master      # 期望实体集合来源
+  universe_source: cn_equity.listing_lifecycle      # 期望实体集合来源
   history_start: 1990-12-19
   expected_dates:
     calendar: cn_equity.trade_calendar            # 期望日期集合来源
@@ -188,7 +188,7 @@ sources:
     endpoint: query_history_k_data_plus
 coverage:
   universe: A 股（含退市）
-  universe_source: cn_equity.security_master
+  universe_source: cn_equity.listing_lifecycle
   history_start: 1990-12-19
   expected_dates:
     calendar: cn_equity.trade_calendar

@@ -311,7 +311,33 @@ def test_storage_config_read_dsn_from_env(monkeypatch: pytest.MonkeyPatch) -> No
     assert "reader" in config.read_dsn and "reader" not in config.write_dsn
     assert config.reader_dsn == config.read_dsn
 
-    # 部分提供 → 显式报错
+    # 部分提供 → 显式报错（含空串等同未配置的部署路径）
     monkeypatch.delenv("DATABASE_READ_PASSWORD")
     with pytest.raises(ValueError, match="必须同时提供"):
         StorageConfig.from_env()
+    monkeypatch.setenv("DATABASE_READ_USER", "reader")
+    monkeypatch.setenv("DATABASE_READ_PASSWORD", "")  # compose 注入空值
+    with pytest.raises(ValueError, match="必须同时提供"):
+        StorageConfig.from_env()
+    # 两侧均为空串 → 未配置（回退写端）
+    monkeypatch.setenv("DATABASE_READ_USER", "")
+    monkeypatch.setenv("DATABASE_READ_PASSWORD", "")
+    assert StorageConfig.from_env().read_dsn is None
+
+
+def test_readonly_default_schemas_deduplicated() -> None:
+    from fin_data_platform.storage.grants import readable_schemas
+
+    schemas = readable_schemas()  # 缺省取字典域（其中含 ref）
+    assert schemas.count("ref") == 1
+    assert schemas.count("mart") == 1
+    assert "raw" not in schemas and "meta" not in schemas
+
+
+def test_readonly_role_name_validation() -> None:
+    from fin_data_platform.storage.grants import readonly_statements
+
+    with pytest.raises(ValueError, match="角色名非法"):
+        readonly_statements(role="bad role")
+    with pytest.raises(ValueError, match="角色名非法"):
+        readonly_statements(role="a'b")

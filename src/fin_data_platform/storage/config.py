@@ -74,7 +74,8 @@ class StorageConfig:
         read_prefix = f"{prefix}READ_"
         read_user = os.environ.get(f"{read_prefix}USER")
         read_password = os.environ.get(f"{read_prefix}PASSWORD")
-        if (read_user is None) != (read_password is None):
+        # 空串等同未配置（compose 常注入空值）；只配一侧 → 显式报错
+        if bool(read_user) != bool(read_password):
             raise ValueError(
                 f"{read_prefix}USER 与 {read_prefix}PASSWORD 必须同时提供"
             )

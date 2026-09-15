@@ -99,8 +99,39 @@ def test_reader_cannot_write_and_sees_only_granted_schemas(writer_engine) -> Non
         with pytest.raises(Exception) as meta_error, read_engine.connect() as connection:
             connection.execute(text("SELECT count(*) FROM meta.job_runs"))
         assert "permission denied" in str(meta_error.value).lower()
+
+        # DEFAULT PRIVILEGES：writer 新建的表自动对 reader 可读
+        with writer_engine.begin() as connection:
+            connection.execute(text("CREATE TABLE cn_equity.fdp_ro_dp_probe (id int)"))
+        try:
+            with read_engine.connect() as connection:
+                connection.execute(
+                    text("SELECT count(*) FROM cn_equity.fdp_ro_dp_probe")
+                )
+        finally:
+            with writer_engine.begin() as connection:
+                connection.execute(text("DROP TABLE cn_equity.fdp_ro_dp_probe"))
+
+        # TimescaleDB 压缩块：权限由扩展自动传播（存在内部 schema 时校验）
+        with writer_engine.connect() as connection:
+            has_internal = connection.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.schemata "
+                    "WHERE schema_name = '_timescaledb_internal')"
+                )
+            ).scalar_one()
+        if has_internal:
+            with writer_engine.connect() as connection:
+                allowed = connection.execute(
+                    text(
+                        "SELECT has_schema_privilege("
+                        f"'{READONLY_ROLE}', '_timescaledb_internal', 'USAGE')"
+                    )
+                ).scalar_one()
+            assert allowed is True
     finally:
         read_engine.dispose()
+        writer_engine.dispose()
         with writer_engine.begin() as connection:
             connection.execute(text(f'REVOKE "{READONLY_ROLE}" FROM "{reader}"'))
             connection.execute(text(f'DROP ROLE IF EXISTS "{reader}"'))

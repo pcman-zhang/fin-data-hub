@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from collections.abc import Iterable, Sequence
 
 from sqlalchemy import Engine, text
@@ -41,14 +42,34 @@ def dictionary_domains() -> list[str]:
 
 
 def readable_schemas(domains: Iterable[str] | None = None) -> list[str]:
-    """只读角色可见 schema：``mart`` + ``ref`` + 数据域（排除内部 schema）。"""
+    """只读角色可见 schema：``mart`` + ``ref`` + 数据域（排除内部 schema；去重）。"""
     values = dictionary_domains() if domains is None else list(domains)
     schemas = [*SHARED_SCHEMAS, *sorted(set(values))]
-    return [schema for schema in schemas if schema not in INTERNAL_SCHEMAS]
+    return [
+        schema
+        for schema in dict.fromkeys(schemas)
+        if schema not in INTERNAL_SCHEMAS
+    ]
 
 
 def _quote(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
+
+
+def _literal(value: str) -> str:
+    """SQL 字符串字面量（单引号翻倍）。"""
+    return "'" + value.replace("'", "''") + "'"
+
+
+#: 允许的角色名（PostgreSQL 标识符子集；防注入与绑定参数歧义）
+_ROLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def validate_role(role: str) -> str:
+    """校验角色名（CLI 传入；不合法直接报错）。"""
+    if not _ROLE_PATTERN.match(role):
+        raise ValueError(f"角色名非法（仅字母/数字/下划线）: {role!r}")
+    return role
 
 
 def readonly_statements(
@@ -63,11 +84,12 @@ def readonly_statements(
     - ``EXECUTE``：mart 表函数（如 ``entity_asof``）；
     - 可选 ``DEFAULT PRIVILEGES``：由 ``writer`` 未来创建的对象自动授权。
     """
+    validate_role(role)
     quoted_role = _quote(role)
     schemas = readable_schemas(domains)
     statements = [
         "DO $$ BEGIN "
-        f"IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') "
+        f"IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = {_literal(role)}) "
         f"THEN CREATE ROLE {quoted_role} NOLOGIN; END IF; "
         "END $$;"
     ]
@@ -127,7 +149,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="fin-data-platform-grants",
         description="只读角色授权（个人平台：只读 / 可写两分；幂等）",
     )
-    parser.add_argument("--role", default=READONLY_ROLE, help="只读权限角色名")
+    parser.add_argument(
+        "--role",
+        default=READONLY_ROLE,
+        type=validate_role,
+        help="只读权限角色名（字母/数字/下划线）",
+    )
     parser.add_argument(
         "--domain", action="append", default=None, help="数据域（可多次；缺省取字典）"
     )

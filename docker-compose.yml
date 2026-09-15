@@ -119,6 +119,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      grant-readonly:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     mem_limit: 1g
@@ -147,6 +149,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      grant-readonly:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     mem_limit: 512m
@@ -161,6 +165,8 @@ services:
     environment: *app-env
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      grant-readonly:
         condition: service_completed_successfully
       redis:
         condition: service_started

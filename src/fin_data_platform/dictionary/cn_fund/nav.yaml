@@ -33,7 +33,7 @@ storage:
   compression:
     after: 7 days
     segment_by: entity_id
-    order_by: date
+    order_by: date, knowledge_time, version
 quality:
   - rule: unique
     keys: [entity_id, date, knowledge_time, version]

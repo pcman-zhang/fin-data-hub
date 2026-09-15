@@ -5,11 +5,14 @@ from __future__ import annotations
 from fin_data_platform.runtime.schema import TABLES as META_TABLES
 from fin_data_platform.storage.migrations import (
     BASELINE_PATH,
+    DDL_HYGIENE_PATH,
     RUNTIME_META_PATH,
     alembic_config,
     baseline_statements,
+    ddl_hygiene_statements,
     expected_head_revision,
     render_baseline_script,
+    render_ddl_hygiene_revision,
     render_runtime_meta_revision,
     runtime_meta_statements,
 )
@@ -95,10 +98,35 @@ def test_runtime_meta_revision_covers_all_tables() -> None:
             assert f"CREATE INDEX IF NOT EXISTS {index.name} ON" in joined
 
 
-def test_expected_head_is_runtime_meta() -> None:
+def test_ddl_hygiene_revision_matches_generator() -> None:
+    """修订 0003 漂移校验：字典/类型映射变更后必须重新生成 0003。"""
+    assert DDL_HYGIENE_PATH.read_text(encoding="utf-8") == render_ddl_hygiene_revision()
+
+
+def test_ddl_hygiene_covers_types_and_compression_keys() -> None:
+    upgrade, _ = ddl_hygiene_statements()
+    joined = "\n".join(upgrade)
+    # 改压缩键前先解压；存量 varchar → text
+    assert "decompress_chunk" in joined
+    assert "character varying" in joined
+    assert "ALTER COLUMN %I TYPE text" in joined
+    # 压缩键覆盖物理键（knowledge_time/version）
+    assert (
+        "compress_orderby = 'trade_date, knowledge_time, version'" in joined
+    )
+    assert (
+        "compress_orderby = 'end_date, report_type, knowledge_time, version'" in joined
+    )
+    assert (
+        "compress_orderby = 'trade_date, con_entity_id, knowledge_time, version'" in joined
+    )
+    assert "compress_orderby = 'date, knowledge_time, version'" in joined
+
+
+def test_expected_head_is_ddl_hygiene() -> None:
     assert (
         expected_head_revision("postgresql+psycopg://u:p@localhost:5432/db")
-        == "0002_runtime_meta"
+        == "0003_ddl_hygiene"
     )
 
 

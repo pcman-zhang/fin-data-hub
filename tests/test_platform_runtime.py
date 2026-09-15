@@ -401,12 +401,15 @@ def test_readiness_fail_fast_on_schema_mismatch(engine) -> None:
     assert report.checks["schema_revision"] is False  # 未 stamp → fail fast
     assert report.ok is False
 
+    from fin_data_platform.storage.migrations import expected_head_revision
+
     with engine.begin() as connection:
         connection.execute(
             text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         )
         connection.execute(
-            text("INSERT INTO alembic_version (version_num) VALUES ('0002_runtime_meta')")
+            text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+            {"revision": expected_head_revision("postgresql+psycopg://u:p@localhost:5432/db")},
         )
     assert readiness(
         engine, dsn="postgresql+psycopg://u:p@localhost:5432/db"

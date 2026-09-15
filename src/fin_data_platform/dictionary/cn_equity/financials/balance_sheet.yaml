@@ -31,7 +31,7 @@ storage:
   compression:
     after: 30 days
     segment_by: issuer_id
-    order_by: end_date
+    order_by: end_date, report_type, knowledge_time, version
 quality:
   - rule: unique
     keys: [issuer_id, end_date, report_type, knowledge_time, version]

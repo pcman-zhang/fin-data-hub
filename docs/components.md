@@ -146,7 +146,8 @@
 **关键概念**：Raw → Canonical → Read Model；事件时间与知识时间分离；
 hypertable 分区与压缩；SCD2 区间；读模型语义版本。
 
-**代码**：`src/fin_data_platform/storage/`（schema 生成、写入与读取、读模型、迁移）
+**代码**：`src/fin_data_platform/storage/`（schema 生成、写入与读取、读模型、迁移、
+只读角色授权 `grants.py`）
 
 ## 5. Runtime（控制面）✅
 

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@freeman'
 created_date: '2026-09-14 06:33'
-updated_date: '2026-09-15 14:01'
+updated_date: '2026-09-15 14:19'
 labels: []
 dependencies: []
 parent_task_id: TASK-3.3
@@ -35,6 +35,12 @@ ordinal: 54000
 5. 集成测试：reader 可读 mart/授权域；写入被拒；raw/meta 不可见
 6. 文档：授权矩阵（角色/对象/权限）+ 配置手册与存储策略同步
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+复审修复（5 项）：① 读写 DSN 成对校验改真值判断（compose 空串路径）+ 用例；② 角色名白名单校验 + DO 块字面量转义；③ readable_schemas 去重（缺省路径不再重复授权 ref）；④ runtime/拆分角色 depends_on grant-readonly 成功后再启动（实测）；⑤ 集成测试补 DEFAULT PRIVILEGES 断言与 TimescaleDB 内部 schema 权限传播校验。待验证项已实测：fdp_ro 对 _timescaledb_internal 有 USAGE 与 8 个 chunk 授权（扩展自动传播，压缩块可读）。验证：404 单测 + 全量集成 + ruff/mypy/链接检查全绿。
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 

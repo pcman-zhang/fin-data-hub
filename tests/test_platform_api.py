@@ -270,24 +270,61 @@ def test_sync_trigger_creates_intent(
     assert run is not None and run.scope == "600519.SH"
 
 
-def test_sync_trigger_skips_unregistered_and_empty_window(client: TestClient) -> None:
+def test_sync_trigger_skips_unregistered(client: TestClient) -> None:
     body = client.post("/v1/jobs/sync", json={"codes": ["000000.XX"]}).json()
     assert body["submitted"] == []
     assert "未注册" in body["skipped"][0]["note"]
 
-    body = client.post(
+    # 非法请求体（空代码清单）→ 422
+    assert client.post("/v1/jobs/sync", json={"codes": []}).status_code == 422
+
+
+def test_sync_trigger_rejects_invalid_window(client: TestClient) -> None:
+    # 窗口倒置 / 未来日期 → 契约校验 422（防止水位被顶到未来导致同步停摆）
+    assert (
+        client.post(
+            "/v1/jobs/sync",
+            json={"codes": ["600519.SH"], "start": "2026-09-12", "end": "2026-09-11"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/v1/jobs/sync",
+            json={"codes": ["600519.SH"], "end": "2030-01-01"},
+        ).status_code
+        == 422
+    )
+
+
+def test_sync_trigger_request_id_idempotent(
+    client: TestClient, meta: InMemoryMetaRepository
+) -> None:
+    meta.set_watermark(DATASET, scope="600519.SH", watermark_time=datetime(2026, 9, 10))
+    first = client.post(
+        "/v1/jobs/sync", json={"codes": ["600519.SH"], "request_id": "manual-9"}
+    ).json()
+    run_id = first["submitted"][0]["run_id"]
+
+    # 相同 request_id（即使窗口不同）→ 返回既有运行，不重复入队
+    replay = client.post(
         "/v1/jobs/sync",
         json={
             "codes": ["600519.SH"],
-            "start": "2026-09-12",
-            "end": "2026-09-11",
+            "start": "2026-09-01",
+            "end": "2026-09-02",
+            "request_id": "manual-9",
         },
     ).json()
-    assert body["submitted"] == []
-    assert "窗口为空" in body["skipped"][0]["note"]
+    assert replay["submitted"][0]["run_id"] == run_id
+    assert "幂等键命中" in replay["submitted"][0]["note"]
 
-    # 非法请求体（空代码清单）→ 422
-    assert client.post("/v1/jobs/sync", json={"codes": []}).status_code == 422
+    # 不同 request_id、同窗口 → 按窗口去重（job_key 幂等）
+    duplicate = client.post(
+        "/v1/jobs/sync", json={"codes": ["600519.SH"], "request_id": "manual-10"}
+    ).json()
+    assert duplicate["submitted"] == []
+    assert "窗口重复" in duplicate["skipped"][0]["note"]
 
 
 # ---------------------------------------------------------------- 系统

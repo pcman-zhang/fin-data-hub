@@ -116,6 +116,8 @@ class MetaRepository(Protocol):
         limit: int = 100,
     ) -> list[JobRun]: ...
 
+    def find_run_by_request_id(self, request_id: str) -> JobRun | None: ...
+
     def count_queued(self) -> int: ...
 
     def parents_ready(
@@ -326,6 +328,13 @@ class InMemoryMetaRepository:
                 and (job_id is None or run.job_id == job_id)
             ]
             return sorted(rows, key=lambda run: run.run_id, reverse=True)[:limit]
+
+    def find_run_by_request_id(self, request_id: str) -> JobRun | None:
+        with self._lock:
+            matches = [
+                run for run in self._runs.values() if run.request_id == request_id
+            ]
+        return min(matches, key=lambda run: run.run_id) if matches else None
 
     def count_queued(self) -> int:
         with self._lock:
@@ -690,6 +699,20 @@ class SqlMetaRepository:
         with self._engine.begin() as connection:
             rows = connection.execute(statement).mappings().all()
         return [_row_to_run(row) for row in rows]
+
+    def find_run_by_request_id(self, request_id: str) -> JobRun | None:
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(job_runs)
+                    .where(job_runs.c.request_id == request_id)
+                    .order_by(job_runs.c.run_id)
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
+        return _row_to_run(row) if row is not None else None
 
     def count_queued(self) -> int:
         with self._engine.begin() as connection:

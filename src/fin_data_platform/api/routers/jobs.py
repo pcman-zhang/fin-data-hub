@@ -87,6 +87,18 @@ def trigger_sync(payload: SyncRequest, context: Context) -> SyncResponse:
             item.note = f"窗口为空（{start} > {end}）"
             skipped.append(item)
             continue
+        if payload.request_id:
+            existing = context.meta.find_run_by_request_id(payload.request_id)
+            if existing is not None:
+                item.run_id = existing.run_id
+                item.status = existing.status
+                item.window_start, item.window_end = (
+                    existing.window_start,
+                    existing.window_end,
+                )
+                item.note = "幂等键命中（返回既有运行）"
+                submitted.append(item)
+                continue
         run = context.meta.create_run(
             JobIntent(
                 kind=JobKind.SYNC.value,
@@ -100,7 +112,7 @@ def trigger_sync(payload: SyncRequest, context: Context) -> SyncResponse:
             request_id=payload.request_id,
         )
         if run is None:
-            item.note = "重复意图（幂等键命中，已忽略）"
+            item.note = "窗口重复（同窗口意图已存在，幂等忽略）"
             skipped.append(item)
             continue
         item.run_id = run.run_id

@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fin_data_platform.dictionary.models import DatasetSpec, FieldSpec
 from fin_data_platform.registry.models import EntityRecord
@@ -228,9 +228,24 @@ class SyncRequest(BaseModel):
     codes: list[str] = Field(min_length=1, max_length=200, description="canonical 代码")
     dataset: str = Field(default="cn_equity.daily_bar", description="目标数据集")
     start: date | None = Field(default=None, description="窗口起点（缺省：水位+1）")
-    end: date | None = Field(default=None, description="窗口终点（缺省：今日）")
-    request_id: str | None = Field(default=None, description="幂等键（重复提交去重）")
+    end: date | None = Field(
+        default=None, description="窗口终点（缺省：今日；不得晚于今天）"
+    )
+    request_id: str | None = Field(
+        default=None, description="幂等键：重复提交返回既有运行（同时写入运行记录）"
+    )
     priority: int = Field(default=100, ge=1, le=999)
+
+    @model_validator(mode="after")
+    def _validate_window(self) -> SyncRequest:
+        from fin_data_platform.runtime._util import utcnow
+
+        today = utcnow().date()
+        if self.end is not None and self.end > today:
+            raise ValueError(f"end 不得晚于今天（UTC {today}）：{self.end}")
+        if self.start is not None and self.end is not None and self.start > self.end:
+            raise ValueError(f"start 不得晚于 end：{self.start} > {self.end}")
+        return self
 
 
 class SyncItem(BaseModel):

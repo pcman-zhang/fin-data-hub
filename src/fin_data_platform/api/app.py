@@ -21,10 +21,10 @@ API_VERSION = "1.0"
 def _default_web_dist() -> Path | None:
     configured = os.environ.get("FDP_WEB_DIST")
     if configured:
-        path = Path(configured)
+        path = Path(configured).resolve()  # 绝对化：SPA 回退的相对路径判断
         return path if path.is_dir() else None
     candidate = Path(__file__).resolve().parents[3] / "web" / "dist"
-    return candidate if candidate.is_dir() else None
+    return candidate.resolve() if candidate.is_dir() else None
 
 
 def create_app(
@@ -54,6 +54,7 @@ def create_app(
 
     dist = web_dist if web_dist is not None else _default_web_dist()
     if dist is not None:
+        dist = dist.resolve()
         assets = dist / "assets"
         if assets.is_dir():
             app.mount("/assets", StaticFiles(directory=assets), name="assets")

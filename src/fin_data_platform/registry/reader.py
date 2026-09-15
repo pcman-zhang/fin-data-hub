@@ -24,7 +24,7 @@ from fin_data_platform.registry.schema import (
     entity_relation,
     relation_type_dict,
 )
-from fin_data_platform.registry.store import _to_record
+from fin_data_platform.registry.store import to_entity_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +103,7 @@ class RegistryReader:
                 .mappings()
                 .all()
             )
-        return [_to_record(row) for row in rows], total
+        return [to_entity_record(row) for row in rows], total
 
     def entity(self, entity_id: int) -> EntityRecord | None:
         """当前态（open 区间优先）。"""
@@ -119,7 +119,7 @@ class RegistryReader:
         )
         with self._engine.connect() as connection:
             row = connection.execute(statement).mappings().first()
-        return _to_record(row) if row is not None else None
+        return to_entity_record(row) if row is not None else None
 
     def entity_history(self, entity_id: int) -> list[EntityRecord]:
         """属性时间轴（SCD2 全部行，按生效日/版本升序）。"""
@@ -130,7 +130,7 @@ class RegistryReader:
         )
         with self._engine.connect() as connection:
             rows = connection.execute(statement).mappings().all()
-        return [_to_record(row) for row in rows]
+        return [to_entity_record(row) for row in rows]
 
     def code_history(self, entity_id: int) -> list[CodeHistoryRecord]:
         statement = (
@@ -184,8 +184,8 @@ class RegistryReader:
         out_rows = self._relation_rows(entity_id, column=entity_relation.c.entity_id)
         in_rows = self._relation_rows(entity_id, column=entity_relation.c.related_id)
 
-        peer_ids = {int(row["entity_id"]) for row in out_rows} | {
-            int(row["related_id"]) for row in in_rows
+        peer_ids = {int(row["related_id"]) for row in out_rows} | {
+            int(row["entity_id"]) for row in in_rows
         }
         peers = self._peer_names(peer_ids)
 
@@ -221,8 +221,10 @@ class RegistryReader:
         return views
 
     def relation_types(self) -> list[RelationTypeRecord]:
-        statement = select(*relation_type_dict.c).order_by(
-            relation_type_dict.c.relation_type
+        statement = (
+            select(*relation_type_dict.c)
+            .where(relation_type_dict.c.valid_to.is_(None))
+            .order_by(relation_type_dict.c.relation_type)
         )
         with self._engine.connect() as connection:
             rows = connection.execute(statement).mappings().all()
@@ -243,14 +245,18 @@ class RegistryReader:
     def _relation_rows(self, entity_id: int, *, column):  # type: ignore[no-untyped-def]
         statement = (
             select(*entity_relation.c)
-            .where(column == entity_id)
+            .where(column == entity_id, entity_relation.c.valid_to.is_(None))
             .order_by(entity_relation.c.relation_type, entity_relation.c.version)
         )
         with self._engine.connect() as connection:
             return connection.execute(statement).mappings().all()
 
     def _relation_types(self):  # type: ignore[no-untyped-def]
-        statement = select(*relation_type_dict.c)
+        statement = (
+            select(*relation_type_dict.c)
+            .where(relation_type_dict.c.valid_to.is_(None))
+            .order_by(relation_type_dict.c.relation_type)
+        )
         with self._engine.connect() as connection:
             return connection.execute(statement).mappings().all()
 

@@ -356,8 +356,13 @@ export FDP_SYNC_SCHEDULE='0 9 * * 1-5'
 **连接口径**：数据读取（数据集/实体）使用 `read_dsn`（只读角色）；控制面（任务/水位/触发）
 使用写连接，且只写 `meta` 意图——采集由 Runtime 执行，不绕过控制面。
 
+**触发语义**：`request_id` 重复提交返回既有运行（幂等）；同窗口（`job_key`）重复提交被
+幂等忽略；`end` 不得晚于今天（UTC）。调度侧按交易日历判定"已收盘/已发布"，
+盘中手工触发可能拿到未完成的当日数据，请谨慎。
+
 **部署**：compose 中的 `service` 默认绑定 `127.0.0.1:8000`（`API_BIND`/`API_PORT` 可调）；
-WebUI 静态资源（`web/dist`）由同一服务托管，SPA 回退到 `index.html`。
+WebUI 静态资源目录由 `FDP_WEB_DIST` 指定（缺省 `web/dist`），由同一服务托管并
+SPA 回退到 `index.html`。
 
 ## 8. 测试用环境变量
 

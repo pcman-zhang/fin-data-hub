@@ -4,7 +4,7 @@ title: 管理 REST 子集：字典 / 实体 / 任务与触发（FastAPI，供 We
 status: Done
 assignee: []
 created_date: '2026-09-15 14:41'
-updated_date: '2026-09-15 14:49'
+updated_date: '2026-09-15 15:04'
 labels: []
 milestone: m-0
 dependencies:
@@ -44,6 +44,12 @@ WebUI 的 API 支撑（doc-14：REST 单一数据面，WebUI 不直连 DB）。�
 - [x] #2 读路径走只读 DSN；POST /v1/jobs/sync 仅提交 meta 意图（校验 job 已注册）；非法参数显式报错
 - [x] #3 单测（TestClient）+ 真库集成（实体检索/任务列表/触发意图）+ compose service 可启动；pytest/ruff/mypy 全绿
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+复审修复（5 项 + nit）：① 修复 reader.relations 对端 ID 取错列（出边应取 related_id / 入边 entity_id，此前 related_code/name 恒空）并补真查询测试；② request_id 幂等语义落地——重复提交返回既有运行（新增 MetaRepository.find_run_by_request_id；同窗口仍按 job_key 幂等忽略），响应 note 与文档同步；③ 窗口边界——end 不得晚于今天（UTC）、start ≤ end，违者 422（防水位顶到未来导致同步停摆）；④ 关系/词表读取仅返回当前态（open），补 SCD2 历史行过滤测试；⑤ FDP_WEB_DIST 绝对化解析 + 文档说明；nit：store._to_record 公有化为 to_entity_record。验证：418 单测 + 全量集成 + ruff/mypy 全绿；容器实测 future end → 422。
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 

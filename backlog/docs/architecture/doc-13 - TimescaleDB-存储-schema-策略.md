@@ -3,7 +3,7 @@ id: doc-13
 title: TimescaleDB 存储 schema 策略
 type: specification
 created_date: '2026-09-13 12:40'
-updated_date: '2026-09-15 12:55'
+updated_date: '2026-09-15 13:59'
 ---
 # TimescaleDB 存储 schema 策略
 
@@ -125,7 +125,9 @@ updated_date: '2026-09-15 12:55'
 2. Alembic 迁移中通过 `create_hypertable`、压缩声明落地；
 3. **幂等写入**：`INSERT … ON CONFLICT (physical_key) DO NOTHING`；
 4. **数据代次（针对 `projection_table`）**：新代次表构建 → 原子 `rename/swap` → `meta.data_generation` 记录（对应 REST `X-Data-Generation`）；`view` 实现无代次切换问题；
-5. 读写 DSN 分离（写入端最小授权 / 读端只读角色）。
+5. 读写 DSN 分离（写入端最小授权 / 读端只读角色）；
+6. **角色与授权（落地口径）**：只读 / 可写两分——`fdp_ro`（NOLOGIN）授予 `mart` + `ref` + 各数据域 canonical 的 `USAGE/SELECT` 与 `mart` 函数 `EXECUTE`，**不含 `raw` / `meta`**；写权限不授（数据库强制拒绝）；`DEFAULT PRIVILEGES` 覆盖新表；授权入口 `python -m fin_data_platform.storage.grants`（部署一次性服务，幂等）。
+   **演进方向（文档化）**：按域拆分 `fdp_ro_<domain>`（基础 + 单域 canonical）实现逐域最小授权；个人平台现阶段保持两分，避免角色矩阵复杂化。
 
 ## 8. 备份、容量与部署
 

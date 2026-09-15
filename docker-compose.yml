@@ -33,6 +33,8 @@ x-app-env: &app-env
   TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
   FDP_REDIS_URL: ${FDP_REDIS_URL:-redis://redis:6379/0}
   FDP_CACHE_TTL: ${FDP_CACHE_TTL:-}
+  DATABASE_READ_USER: ${DATABASE_READ_USER:-}
+  DATABASE_READ_PASSWORD: ${DATABASE_READ_PASSWORD:-}
 
 x-logging: &logging
   driver: json-file
@@ -117,10 +119,24 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      grant-readonly:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     mem_limit: 1g
     cpus: 1.5
+    logging: *logging
+
+  grant-readonly:
+    <<: *app-image
+    restart: "no"
+    command: ["python", "-m", "fin_data_platform.storage.grants"]
+    environment: *db-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 512m
+    cpus: 0.25
     logging: *logging
 
   # ---------------------------------------------------------------- 拆分角色
@@ -132,6 +148,8 @@ services:
     environment: *app-env
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      grant-readonly:
         condition: service_completed_successfully
       redis:
         condition: service_started
@@ -147,6 +165,8 @@ services:
     environment: *app-env
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      grant-readonly:
         condition: service_completed_successfully
       redis:
         condition: service_started

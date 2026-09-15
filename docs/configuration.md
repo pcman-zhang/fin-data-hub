@@ -120,6 +120,8 @@ config = HubConfig(rate_limits={"ifind": RateLimitConfig(rate=2.0, burst=2.0, ti
 | `DATABASE_PASSWORD` | ✅ | 密码 |
 | `DATABASE_NAME` | | 默认 `fin_data_platform` |
 | `DATABASE_CONNECT_TIMEOUT` | | 连接超时秒数（默认 5；网络不可达时快速失败） |
+| `DATABASE_READ_USER` / `DATABASE_READ_PASSWORD` | | 只读登录用户（读写 DSN 分离；缺省沿用写端） |
+| `DATABASE_READ_HOST` / `DATABASE_READ_PORT` / `DATABASE_READ_NAME` | | 只读连接覆盖（可缺省） |
 | `FDP_DATABASE_HOST` | | 覆盖主机（地址变动的场景） |
 
 `StorageConfig` 同时支持读写 DSN 分离（`write_dsn` / `read_dsn`）与
@@ -162,6 +164,32 @@ export $(grep -v '^#' .env | xargs)
 
 基线由数据字典生成；字典变更必须新增迁移修订。
 
+### 3.4 权限与读写 DSN 分离
+
+**当前实现：只读 / 可写两分**
+
+| 角色 | 类型 | 权限 | 用途 |
+|---|---|---|---|
+| `<writer>`（`DATABASE_USER`） | 登录用户 | 各 schema 读写 | 采集 / 派生 / 迁移 |
+| `fdp_ro` | NOLOGIN 权限角色 | `mart` + `ref` + 各数据域 canonical 的 `USAGE/SELECT`、`mart` 函数 `EXECUTE`；**不含** `raw` / `meta` | 只读授权载体 |
+
+只读登录用户由调用方/运维创建并继承权限角色（凭证不经过代码与仓库）：
+
+```sql
+CREATE ROLE app_ro LOGIN PASSWORD '...';
+GRANT fdp_ro TO app_ro;
+```
+
+- **DSN 分离**：配置 `DATABASE_READ_USER` / `DATABASE_READ_PASSWORD` 后，
+  `create_read_engine` 使用只读连接——写入会被**数据库**拒绝（不是代码约定）；
+- **授权执行**：`python -m fin_data_platform.storage.grants`（幂等；容器中由
+  一次性服务 `grant-readonly` 在迁移后自动执行）；新表/视图经
+  `DEFAULT PRIVILEGES` 自动覆盖。
+
+**目标架构（文档化，后续演进）**：按域拆分只读角色 `fdp_ro_<domain>`
+（基础角色 + 单域 canonical），实现逐域最小授权；个人平台现阶段收敛为
+只读 / 可写两分，避免角色矩阵过度复杂化。
+
 ## 4. 容器化部署（Docker Compose）
 
 平台以单镜像多入口交付；数据库、一次性迁移与 Runtime 由 Compose 编排：
@@ -179,6 +207,7 @@ docker compose logs -f runtime
 | `timescaledb` | PostgreSQL + TimescaleDB（数据卷持久化） |
 | `redis` | 缓存层基础设施（非权威、无持久化，可随时清空重建；默认 2 GB + volatile-lru） |
 | `migrate` | 一次性迁移（`upgrade()`），成功后退出 |
+| `grant-readonly` | 一次性只读授权（迁移后执行，幂等） |
 | `runtime` | 控制面进程（`--role all`，单机默认） |
 
 **行为约定**

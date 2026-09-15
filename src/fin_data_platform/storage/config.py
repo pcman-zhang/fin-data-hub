@@ -35,7 +35,9 @@ class StorageConfig:
     ) -> StorageConfig:
         """从环境变量构建 DSN（凭证不落盘）。
 
-        ``DATABASE_HOST/PORT/USER/PASSWORD``（``DATABASE_NAME`` 可选）；
+        写端：``DATABASE_HOST/PORT/USER/PASSWORD``（``DATABASE_NAME`` 可选）；
+        读端：``DATABASE_READ_USER/PASSWORD``（可选；``DATABASE_READ_HOST/PORT/NAME``
+        缺省沿用写端）——实现读写 DSN 分离（reader 仅有只读角色权限）；
         ``DATABASE_CONNECT_TIMEOUT`` 可选（秒，默认 5）；``host_override`` 用于
         DHCP 等地址变动的场景。
         """
@@ -69,7 +71,27 @@ class StorageConfig:
             port=int(port),
             database=name,
         )
+        read_prefix = f"{prefix}READ_"
+        read_user = os.environ.get(f"{read_prefix}USER")
+        read_password = os.environ.get(f"{read_prefix}PASSWORD")
+        # 空串等同未配置（compose 常注入空值）；只配一侧 → 显式报错
+        if bool(read_user) != bool(read_password):
+            raise ValueError(
+                f"{read_prefix}USER 与 {read_prefix}PASSWORD 必须同时提供"
+            )
+        read_dsn: str | None = None
+        if read_user and read_password:
+            read_url = URL.create(
+                "postgresql+psycopg",
+                username=read_user,
+                password=read_password,
+                host=os.environ.get(f"{read_prefix}HOST") or host,
+                port=int(os.environ.get(f"{read_prefix}PORT", port)),
+                database=os.environ.get(f"{read_prefix}NAME", name),
+            )
+            read_dsn = read_url.render_as_string(hide_password=False)
         return cls(
             write_dsn=url.render_as_string(hide_password=False),
+            read_dsn=read_dsn,
             connect_timeout=connect_timeout,
         )

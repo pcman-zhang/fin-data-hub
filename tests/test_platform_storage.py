@@ -260,3 +260,84 @@ def test_storage_config_connect_timeout_env(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("DATABASE_CONNECT_TIMEOUT", "0")
     with pytest.raises(ValueError, match="CONNECT_TIMEOUT"):
         StorageConfig.from_env()
+
+
+# ------------------------------------------------------------------ 只读授权
+def test_readonly_statements_cover_readable_schemas_only() -> None:
+    from fin_data_platform.storage.grants import readonly_statements
+
+    statements = readonly_statements(domains=["cn_equity", "cn_fund"], writer="fdp")
+    joined = "\n".join(statements)
+    assert 'CREATE ROLE "fdp_ro" NOLOGIN' in joined
+    for schema in ("mart", "ref", "cn_equity", "cn_fund"):
+        assert f'GRANT USAGE ON SCHEMA "{schema}" TO "fdp_ro";' in joined
+        assert (
+            f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema}" TO "fdp_ro";' in joined
+        )
+        assert (
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "fdp" IN SCHEMA "{schema}" '
+            'GRANT SELECT ON TABLES TO "fdp_ro";' in joined
+        )
+    assert 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA "mart" TO "fdp_ro";' in joined
+    # 内部 schema 一律不授权
+    for internal in ("raw", "meta", "alembic_version"):
+        assert f'"{internal}"' not in joined
+
+
+def test_readable_schemas_exclude_internal() -> None:
+    from fin_data_platform.storage.grants import readable_schemas
+
+    assert readable_schemas(["cn_equity", "raw", "meta"]) == [
+        "mart",
+        "ref",
+        "cn_equity",
+    ]
+
+
+def test_storage_config_read_dsn_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fin_data_platform.storage.config import StorageConfig
+
+    monkeypatch.setenv("DATABASE_USER", "writer")
+    monkeypatch.setenv("DATABASE_PASSWORD", "wp")
+    monkeypatch.setenv("DATABASE_HOST", "db")
+    monkeypatch.delenv("DATABASE_READ_USER", raising=False)
+    monkeypatch.delenv("DATABASE_READ_PASSWORD", raising=False)
+    assert StorageConfig.from_env().read_dsn is None
+
+    monkeypatch.setenv("DATABASE_READ_USER", "reader")
+    monkeypatch.setenv("DATABASE_READ_PASSWORD", "rp")
+    config = StorageConfig.from_env()
+    assert config.read_dsn is not None
+    assert "reader" in config.read_dsn and "reader" not in config.write_dsn
+    assert config.reader_dsn == config.read_dsn
+
+    # 部分提供 → 显式报错（含空串等同未配置的部署路径）
+    monkeypatch.delenv("DATABASE_READ_PASSWORD")
+    with pytest.raises(ValueError, match="必须同时提供"):
+        StorageConfig.from_env()
+    monkeypatch.setenv("DATABASE_READ_USER", "reader")
+    monkeypatch.setenv("DATABASE_READ_PASSWORD", "")  # compose 注入空值
+    with pytest.raises(ValueError, match="必须同时提供"):
+        StorageConfig.from_env()
+    # 两侧均为空串 → 未配置（回退写端）
+    monkeypatch.setenv("DATABASE_READ_USER", "")
+    monkeypatch.setenv("DATABASE_READ_PASSWORD", "")
+    assert StorageConfig.from_env().read_dsn is None
+
+
+def test_readonly_default_schemas_deduplicated() -> None:
+    from fin_data_platform.storage.grants import readable_schemas
+
+    schemas = readable_schemas()  # 缺省取字典域（其中含 ref）
+    assert schemas.count("ref") == 1
+    assert schemas.count("mart") == 1
+    assert "raw" not in schemas and "meta" not in schemas
+
+
+def test_readonly_role_name_validation() -> None:
+    from fin_data_platform.storage.grants import readonly_statements
+
+    with pytest.raises(ValueError, match="角色名非法"):
+        readonly_statements(role="bad role")
+    with pytest.raises(ValueError, match="角色名非法"):
+        readonly_statements(role="a'b")

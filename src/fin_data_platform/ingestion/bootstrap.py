@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy import Engine
 
+from fin_data_platform.cache import LayeredCache, cache_from_env
 from fin_data_platform.ingestion.settings import SyncSettings
 from fin_data_platform.ingestion.tasks import register_daily_bar_task
 from fin_data_platform.runtime.app import RuntimeApp
@@ -48,11 +49,17 @@ def build_sync_runtime(
     hub: Any = None,
     engine: Engine | None = None,
     env: Mapping[str, str] | None = None,
+    cache: LayeredCache | None = None,
 ) -> RuntimeApp:
-    """组装 Runtime：日线同步任务（按配置的代码清单）+ 日历 + 水位窗口。"""
+    """组装 Runtime：日线同步任务（按配置的代码清单）+ 日历 + 水位窗口。
+
+    缓存按环境装配（``FDP_REDIS_URL``；未配置则仅进程内或禁用），
+    同步成功后按域失效（代际递增）。
+    """
     engine = engine or create_write_engine(config.storage)
     repository = SqlMetaRepository(engine)
     registry = TaskRegistry()
+    active_cache = cache if cache is not None else cache_from_env(env)
     due_provider = None
     if settings is not None:
         hub = hub or build_hub(env)
@@ -65,6 +72,7 @@ def build_sync_runtime(
                 code=code,
                 source=settings.source,
                 schedule=settings.schedule,
+                cache=active_cache,
             )
             start_dates[spec.job_id] = settings.start
         calendar = HubTradeCalendar(hub, source=settings.source)

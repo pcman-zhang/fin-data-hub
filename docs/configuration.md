@@ -177,7 +177,7 @@ docker compose logs -f runtime
 | 服务 | 说明 |
 |---|---|
 | `timescaledb` | PostgreSQL + TimescaleDB（数据卷持久化） |
-| `redis` | 缓存层基础设施（非权威、无持久化，可随时清空重建） |
+| `redis` | 缓存层基础设施（非权威、无持久化，可随时清空重建；默认 2 GB + volatile-lru） |
 | `migrate` | 一次性迁移（`upgrade()`），成功后退出 |
 | `runtime` | 控制面进程（`--role all`，单机默认） |
 
@@ -215,9 +215,50 @@ docker compose down                    # 停止（保留数据卷）
 docker compose down -v                 # 停止并清空数据卷（慎用）
 ```
 
-## 5. Runtime（控制面）
+## 5. 缓存（L1 进程内 + L2 Redis）
 
-### 5.1 启动
+缓存**非权威**：清空后可完全由权威层重建；后端异常时 **fail-open**（按 miss 处理，直查权威层），
+不阻塞数据链路。
+
+**配置**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `FDP_REDIS_URL` | 空 | Redis 连接串（如 `redis://redis:6379/0`）；**未设置则不启用缓存** |
+| `FDP_CACHE_TTL` | 21600（6h） | 默认 TTL（秒） |
+| `FDP_CACHE_TTL_<DOMAIN>` | — | 按域覆盖（域名大写，如 `FDP_CACHE_TTL_CN_EQUITY`） |
+| `FDP_CACHE_L1_ENTRIES` | 4096 | L1 条数上限 |
+| `FDP_CACHE_L1_BYTES` | 256 MiB | L1 字节上限 |
+| `REDIS_MAXMEMORY` | `2gb` | 编排中 Redis 内存上限（`volatile-lru` 淘汰） |
+| `REDIS_BIND` | `127.0.0.1` | 编排中 Redis 端口监听地址（无鉴权，默认仅本机） |
+
+**键与失效**
+
+```
+fdh:{domain}:{panel}:g{generation}:{asof:<时间>|kt:<时间>}:{params_hash}
+```
+
+- **PIT 安全**：`as_of` 与 `knowledge_time` **互斥且必须二选一**——防止前视与陈旧数据混用；
+- **代际失效**：同步成功 → 域代际 +1，旧键自然失效（免 `SCAN`）；
+- **防击穿**：L2 锁跨进程 single-flight；等待超时回退自算；
+- **序列化**：DataFrame → Arrow IPC；小对象 → JSON；含格式版本（不兼容按 miss 处理）。
+
+**用法**
+
+```python
+from fin_data_platform.cache import cache_from_env
+from fin_data_platform.storage.readers import cached_frame
+
+cache = cache_from_env()                     # 未配置 FDP_REDIS_URL → None
+if cache is not None:
+    key = cache.build_key("cn_equity", "daily_bar", as_of="2026-09-14", params={"fields": ["close"]})
+    frame = cached_frame(cache, key, loader=lambda: load_from_db())
+    stats = cache.stats()                    # 命中率 / 字节 / 淘汰 / 锁等待
+```
+
+## 6. Runtime（控制面）
+
+### 6.1 启动
 
 ```bash
 .venv/bin/python -m fin_data_platform.runtime --role all
@@ -231,7 +272,7 @@ docker compose down -v                 # 停止并清空数据卷（慎用）
 
 退出码：`0` 正常停止；`1` 启动健康检查未通过；`2` 配置非法。
 
-### 5.2 同步任务（环境变量）
+### 6.2 同步任务（环境变量）
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
@@ -253,7 +294,7 @@ export FDP_SYNC_SCHEDULE='0 9 * * 1-5'
 行为：启动即从水位追平到最近已收盘交易日，成功后推进水位；失败按运行记录
 重试；调度注册持久化，进程重启不丢。
 
-### 5.3 运行时参数（`RuntimeConfig`）
+### 6.3 运行时参数（`RuntimeConfig`）
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -265,7 +306,7 @@ export FDP_SYNC_SCHEDULE='0 9 * * 1-5'
 | `check_dictionary` | `True` | 启动校验字典 |
 | `check_schema` | `True` | 启动校验数据库 schema |
 
-## 6. 测试用环境变量
+## 7. 测试用环境变量
 
 集成测试读取（库本身不读取这些变量，仅测试使用）：
 

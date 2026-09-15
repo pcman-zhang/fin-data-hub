@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import Engine
 
+from fin_data_platform.cache import LayeredCache
 from fin_data_platform.ingestion.daily_bar import DATASET, sync_daily_bar
 from fin_data_platform.runtime._util import utcnow
 from fin_data_platform.runtime.models import JobKind
@@ -29,6 +30,7 @@ def register_daily_bar_task(
     schedule: str | None = None,
     priority: int = 100,
     max_attempts: int = 3,
+    cache: LayeredCache | None = None,
 ) -> TaskSpec:
     """注册单标的日线同步任务（``scope=code``；窗口由调度或手动意图提供）。
 
@@ -67,6 +69,9 @@ def register_daily_bar_task(
             scope=code,
             watermark_time=datetime.combine(target, time(0, 0)),
         )
+        if cache is not None:
+            # 同步成功 → 按域失效（代际递增；缓存非权威，fail-open）
+            cache.invalidate_domain(DATASET.split(".", 1)[0])
 
     return registry.register(
         TaskSpec(

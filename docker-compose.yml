@@ -31,6 +31,8 @@ x-app-env: &app-env
   FDP_SYNC_SOURCE: ${FDP_SYNC_SOURCE:-}
   FDP_SYNC_SCHEDULE: ${FDP_SYNC_SCHEDULE:-}
   TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+  FDP_REDIS_URL: ${FDP_REDIS_URL:-redis://redis:6379/0}
+  FDP_CACHE_TTL: ${FDP_CACHE_TTL:-}
 
 x-logging: &logging
   driver: json-file
@@ -78,9 +80,12 @@ services:
       - --appendonly
       - "no"
       - --maxmemory
-      - 512mb
+      - ${REDIS_MAXMEMORY:-2gb}
       - --maxmemory-policy
       - volatile-lru
+    ports:
+      # 供宿主机集成测试与调试；默认仅本机监听（Redis 无鉴权，勿直接暴露）
+      - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

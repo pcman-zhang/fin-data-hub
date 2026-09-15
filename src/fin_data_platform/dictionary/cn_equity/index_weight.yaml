@@ -31,7 +31,7 @@ storage:
   compression:
     after: 30 days
     segment_by: index_entity_id
-    order_by: trade_date
+    order_by: trade_date, con_entity_id, knowledge_time, version
 quality:
   - rule: unique
     keys: [index_entity_id, trade_date, con_entity_id]

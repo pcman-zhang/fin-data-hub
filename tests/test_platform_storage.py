@@ -47,7 +47,7 @@ def test_metadata_from_dictionary() -> None:
         "version",
     ]
     assert str(table.c.amount.type) == "NUMERIC(24, 4)"
-    assert str(table.c.provider.type) == "VARCHAR(32)"
+    assert str(table.c.provider.type) == "TEXT"
     assert any(
         index.name == "ix_daily_bar_business" for index in table.indexes
     )
@@ -80,6 +80,26 @@ def test_schema_sql_for_postgres() -> None:
     assert "CREATE SCHEMA IF NOT EXISTS cn_equity" in joined
     assert "CREATE TABLE cn_equity.daily_bar" in joined
     assert "NUMERIC(24, 4)" in joined
+
+
+def test_compression_keys_cover_physical_key() -> None:
+    """TimescaleDB 唯一性要求：物理键列必须包含在 segmentby ∪ orderby（TASK-3.20）。"""
+    _, specs = build_metadata()
+    compressed = {
+        dataset: spec
+        for dataset, spec in specs.items()
+        if spec.storage.compression is not None
+    }
+    assert compressed, "应存在带压缩配置的数据集"
+    for dataset, spec in compressed.items():
+        compression = spec.storage.compression
+        assert compression is not None
+        covered = {compression.segment_by}
+        covered.update(
+            column.strip() for column in compression.order_by.split(",")
+        )
+        missing = set(spec.physical_key) - covered
+        assert not missing, f"{dataset} 压缩键未覆盖物理键列: {sorted(missing)}"
 
 
 def test_timescale_statements_by_partition_strategy() -> None:

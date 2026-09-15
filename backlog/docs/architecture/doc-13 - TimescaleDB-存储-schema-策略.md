@@ -3,7 +3,7 @@ id: doc-13
 title: TimescaleDB 存储 schema 策略
 type: specification
 created_date: '2026-09-13 12:40'
-updated_date: '2026-09-14 14:23'
+updated_date: '2026-09-15 12:55'
 ---
 # TimescaleDB 存储 schema 策略
 
@@ -76,7 +76,9 @@ updated_date: '2026-09-14 14:23'
 3. `segmentby / orderby` 只影响压缩效率与解压粒度，**禁止任何查询语义依赖它们**；排序/游标分页必须显式 `ORDER BY`，不得依赖物理顺序；
 4. 压缩会改变执行计划与统计信息（chunk fast path、BRIN 交互），验收以**结果比对**为准，不以执行计划为准；
 5. `is_latest` 为读侧派生（§4）：压缩后 view 窗口函数与 projection 物化结果必须一致；
-6. 压缩参数变更（`segment_by / order_by / compress_after`）视为 schema 变更：走迁移 + CI 复验。
+6. 压缩参数变更（`segment_by / order_by / compress_after`）视为 schema 变更：走迁移 + CI 复验；
+7. **压缩键必须覆盖物理键**：`segment_by ∪ order_by ⊇ physical_key`（TimescaleDB 唯一性要求；否则压缩块内唯一索引不被强制执行），CI 校验字典压缩配置；
+8. **枚举列统一 `text`**（长度约束由字典 CI 承担，不用 `varchar(n)`）：避免扩展的类型建议告警；`ref` 与 canonical 表同源（字典条目优先）。
 
 **CI 门禁（强制）**：
 

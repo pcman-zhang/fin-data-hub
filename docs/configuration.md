@@ -208,6 +208,7 @@ docker compose logs -f runtime
 | `redis` | 缓存层基础设施（非权威、无持久化，可随时清空重建；默认 2 GB + volatile-lru） |
 | `migrate` | 一次性迁移（`upgrade()`），成功后退出 |
 | `grant-readonly` | 一次性只读授权（迁移后执行，幂等） |
+| `service` | 管理 API / WebUI（FastAPI + SPA；默认仅本机 127.0.0.1:8000） |
 | `runtime` | 控制面进程（`--role all`，单机默认） |
 
 **行为约定**
@@ -335,7 +336,30 @@ export FDP_SYNC_SCHEDULE='0 9 * * 1-5'
 | `check_dictionary` | `True` | 启动校验字典 |
 | `check_schema` | `True` | 启动校验数据库 schema |
 
-## 7. 测试用环境变量
+## 7. 管理 API 与 WebUI
+
+面向**平台治理**的 REST 接口（doc-14：WebUI 只经 REST，不直连数据库）：
+
+```bash
+.venv/bin/python -m fin_data_platform.api --host 127.0.0.1 --port 8000
+# 交互文档：http://127.0.0.1:8000/api/docs
+```
+
+| 端点 | 说明 |
+|---|---|
+| `GET /v1/datasets`、`/v1/datasets/{dataset}` | 数据集字典（字段/口径/PIT/键/SLA/质量/血缘/存储/映射） |
+| `GET /v1/entities`、`/v1/entities/{id}`、`/v1/entities/relation-types` | 实体检索与详情（时间轴/代码履历/关系/外部标识） |
+| `GET /v1/jobs`、`/v1/jobs/{run_id}`、`/v1/watermarks` | 任务运行记录与数据水位 |
+| `POST /v1/jobs/sync` | 触发同步：提交意图到 `meta` 队列（Runtime 执行；幂等键 `request_id`） |
+| `GET /healthz` | 健康检查（数据库 / 字典 / schema 版本） |
+
+**连接口径**：数据读取（数据集/实体）使用 `read_dsn`（只读角色）；控制面（任务/水位/触发）
+使用写连接，且只写 `meta` 意图——采集由 Runtime 执行，不绕过控制面。
+
+**部署**：compose 中的 `service` 默认绑定 `127.0.0.1:8000`（`API_BIND`/`API_PORT` 可调）；
+WebUI 静态资源（`web/dist`）由同一服务托管，SPA 回退到 `index.html`。
+
+## 8. 测试用环境变量
 
 集成测试读取（库本身不读取这些变量，仅测试使用）：
 

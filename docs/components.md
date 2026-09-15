@@ -190,7 +190,9 @@ hypertable 分区与压缩；SCD2 区间；读模型语义版本。
 - **Read Model**：`mart` 下语义版本化的视图 / 表函数，as-of 语义原生；
 - **SDK**：直连 Read Model（direct mode），无需经过服务；
 - **REST**：薄封装（供管理台与跨语言消费）；
-- **批量导出**：研究通道（Parquet / CSV / DuckDB）。
+- **批量导出**：研究通道（Parquet / CSV / DuckDB）；
+- **管理 API / WebUI**：平台治理界面（数据集字典、实体注册表、任务与水位、同步触发）——
+  FastAPI + SPA，同镜像 `service`，默认仅本机。
 
 **边界**：只读；不改变数据语义；权限按数据集裁剪。
 

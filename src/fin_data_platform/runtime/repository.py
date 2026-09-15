@@ -129,6 +129,8 @@ class MetaRepository(Protocol):
 
     def get_watermark(self, dataset: str, scope: str = "") -> Watermark | None: ...
 
+    def list_watermarks(self) -> list[Watermark]: ...
+
     def set_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime
     ) -> Watermark: ...
@@ -372,6 +374,12 @@ class InMemoryMetaRepository:
     def get_watermark(self, dataset: str, scope: str = "") -> Watermark | None:
         with self._lock:
             return self._watermarks.get((dataset, scope))
+
+    def list_watermarks(self) -> list[Watermark]:
+        with self._lock:
+            return sorted(
+                self._watermarks.values(), key=lambda mark: (mark.dataset, mark.scope)
+            )
 
     def set_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime
@@ -749,6 +757,26 @@ class SqlMetaRepository:
             scope=str(row["scope"]),
             watermark_time=row["watermark_time"],
         )
+
+    def list_watermarks(self) -> list[Watermark]:
+        with self._engine.connect() as connection:
+            rows = (
+                connection.execute(
+                    select(watermarks).order_by(
+                        watermarks.c.dataset, watermarks.c.scope
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            Watermark(
+                dataset=str(row["dataset"]),
+                scope=str(row["scope"]),
+                watermark_time=row["watermark_time"],
+            )
+            for row in rows
+        ]
 
     def set_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime

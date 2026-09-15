@@ -51,7 +51,7 @@
 |---|---|---|
 | **Control Plane** | Runtime（调度 / 分发 / 执行）、任务定义与运行记录、水位、质量结果、算法登记与重述台账 | `meta` schema + 常驻进程 |
 | **Data Plane** | Entity Registry、DataPanel（Raw → Canonical → Read Model）、TimescaleDB | 分层由字典声明 |
-| **Consumption Plane** | SDK / REST / 批量导出 / 未来的 MCP 等 | 只读适配器，不改变数据语义 |
+| **Consumption Plane** | SDK / REST（含管理 API 与 WebUI）/ 批量导出 / 未来的 MCP 等 | 只读适配器，不改变数据语义；管理 API 的任务触发仅提交控制面意图 |
 
 ## 4. 数据分层
 

@@ -139,6 +139,33 @@ services:
     cpus: 0.25
     logging: *logging
 
+  service:
+    <<: *app-image
+    restart: unless-stopped
+    command: ["python", "-m", "fin_data_platform.api", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *app-env
+    ports:
+      # 管理 API / WebUI：默认仅本机
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      grant-readonly:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *logging
+
   # ---------------------------------------------------------------- 拆分角色
   runtime-scheduler:
     <<: *app-image

@@ -19,7 +19,7 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN pip install --no-cache-dir \
-        ".[platform,tushare,akshare,ifind,wind,fuyao,baostock]" \
+        ".[platform,cache,tushare,akshare,ifind,wind,fuyao,baostock]" \
     && rm -rf /app/build /app/src /app/pyproject.toml
 
 # 迁移资产需随镜像携带（pip 不打包 alembic.ini / migrations）

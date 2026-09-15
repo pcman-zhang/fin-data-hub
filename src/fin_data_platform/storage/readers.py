@@ -1,12 +1,19 @@
-"""PIT 读取：as-of（知识时间过滤 + 每键最新版本）与 latest。"""
+"""PIT 读取：as-of（知识时间过滤 + 每键最新版本）与 latest。
+
+另提供 :func:`cached_frame`：按 PIT 键缓存 DataFrame 结果（L1/L2，fail-open）。
+"""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import pandas as pd
 from sqlalchemy import Select, Table, func, select
+
+if TYPE_CHECKING:  # 避免 storage → cache 的运行时耦合
+    from fin_data_platform.cache import LayeredCache
 
 
 def _ranked(
@@ -67,3 +74,21 @@ def latest_query(
     return select(
         *[subquery.c[column.name] for column in table.c]
     ).where(subquery.c._rank == 1)
+
+
+def cached_frame(
+    cache: LayeredCache,
+    key: str,
+    loader: Callable[[], pd.DataFrame],
+    *,
+    ttl: float | None = None,
+) -> pd.DataFrame:
+    """按缓存键读取 DataFrame；未命中时执行 ``loader`` 并回填（fail-open）。
+
+    键由调用方（消费层）用 ``cache.build_key(domain, panel, as_of=..., params=...)``
+    构造，保证 PIT 语义与域代际正确。
+    """
+    value = cache.get_or_load(key, loader, ttl=ttl)
+    if not isinstance(value, pd.DataFrame):
+        raise TypeError(f"缓存值不是 DataFrame: {type(value).__name__}")
+    return value

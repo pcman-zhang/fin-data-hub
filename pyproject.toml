@@ -29,10 +29,17 @@ platform = [
     "psycopg[binary]>=3.2",
     "apscheduler>=3.10,<4",
 ]
+cache = [
+    "redis>=5.0",
+    "pyarrow>=17",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    "fakeredis>=2.26",
+    "redis>=5.0",
+    "pyarrow>=17",
     "pandas-stubs>=2.2",
     "httpx>=0.27",
     "pydantic>=2.7",

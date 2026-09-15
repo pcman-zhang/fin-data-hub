@@ -28,7 +28,7 @@ def _utcnow() -> datetime:
 _ALLOC_LOCK_KEY = "fdp_entity:alloc"
 
 
-def _to_record(row: object) -> EntityRecord:
+def to_entity_record(row: object) -> EntityRecord:
     mapping = row  # RowMapping
     return EntityRecord(  # type: ignore[arg-type]
         entity_id=int(mapping["entity_id"]),  # type: ignore[index]
@@ -83,7 +83,7 @@ class EntityStore:
                 .limit(1)
             ).mappings().first()
             if existing is not None:
-                return _to_record(existing)
+                return to_entity_record(existing)
 
             next_id = int(
                 connection.execute(

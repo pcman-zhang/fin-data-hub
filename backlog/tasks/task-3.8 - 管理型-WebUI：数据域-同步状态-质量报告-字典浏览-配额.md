@@ -4,13 +4,11 @@ title: 管理型 WebUI：数据域 / 同步状态 / 质量报告 / 字典浏览 
 status: To Do
 assignee: []
 created_date: '2026-09-13 06:07'
-updated_date: '2026-09-13 12:54'
+updated_date: '2026-09-15 14:41'
 labels: []
 milestone: m-0
 dependencies:
-  - TASK-3.1
-  - TASK-3.3
-  - TASK-3.7
+  - TASK-3.21
 parent_task_id: TASK-3
 ordinal: 27000
 ---
@@ -34,4 +32,6 @@ ordinal: 27000
 范围收敛（2026-09-13，个人平台定位）：认证/授权/SSO 属于生产级能力，分离至 doc-15《认证与授权（增强功能，暂不制作）》；首期 WebUI 仅本机 127.0.0.1、无账号体系；保留高风险操作二次确认与最小事件日志。
 
 决策（2026-09-13）：事件日志不保留（个人平台首期）；通知渠道独立为 doc-16（飞书等，暂不制作）。
+
+范围（2026-09-15，已确认）：WebUI 基于 TASK-3.21 管理 REST 子集；技术栈 React + TS + Vite + Tailwind + lucide + TanStack Query；v1 页面=数据集/实体注册表/任务（+极简总览）；不引图表库（表格+时间轴）；构建采用本地/CI 预构建 web/dist 入镜像（多阶段 Node 构建为备选）。
 <!-- SECTION:NOTES:END -->

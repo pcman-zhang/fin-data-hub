@@ -116,6 +116,8 @@ class MetaRepository(Protocol):
         limit: int = 100,
     ) -> list[JobRun]: ...
 
+    def find_run_by_request_id(self, request_id: str) -> JobRun | None: ...
+
     def count_queued(self) -> int: ...
 
     def parents_ready(
@@ -128,6 +130,8 @@ class MetaRepository(Protocol):
     ) -> bool: ...
 
     def get_watermark(self, dataset: str, scope: str = "") -> Watermark | None: ...
+
+    def list_watermarks(self) -> list[Watermark]: ...
 
     def set_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime
@@ -325,6 +329,13 @@ class InMemoryMetaRepository:
             ]
             return sorted(rows, key=lambda run: run.run_id, reverse=True)[:limit]
 
+    def find_run_by_request_id(self, request_id: str) -> JobRun | None:
+        with self._lock:
+            matches = [
+                run for run in self._runs.values() if run.request_id == request_id
+            ]
+        return min(matches, key=lambda run: run.run_id) if matches else None
+
     def count_queued(self) -> int:
         with self._lock:
             return sum(
@@ -372,6 +383,12 @@ class InMemoryMetaRepository:
     def get_watermark(self, dataset: str, scope: str = "") -> Watermark | None:
         with self._lock:
             return self._watermarks.get((dataset, scope))
+
+    def list_watermarks(self) -> list[Watermark]:
+        with self._lock:
+            return sorted(
+                self._watermarks.values(), key=lambda mark: (mark.dataset, mark.scope)
+            )
 
     def set_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime
@@ -683,6 +700,20 @@ class SqlMetaRepository:
             rows = connection.execute(statement).mappings().all()
         return [_row_to_run(row) for row in rows]
 
+    def find_run_by_request_id(self, request_id: str) -> JobRun | None:
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(job_runs)
+                    .where(job_runs.c.request_id == request_id)
+                    .order_by(job_runs.c.run_id)
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
+        return _row_to_run(row) if row is not None else None
+
     def count_queued(self) -> int:
         with self._engine.begin() as connection:
             return int(
@@ -749,6 +780,26 @@ class SqlMetaRepository:
             scope=str(row["scope"]),
             watermark_time=row["watermark_time"],
         )
+
+    def list_watermarks(self) -> list[Watermark]:
+        with self._engine.connect() as connection:
+            rows = (
+                connection.execute(
+                    select(watermarks).order_by(
+                        watermarks.c.dataset, watermarks.c.scope
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            Watermark(
+                dataset=str(row["dataset"]),
+                scope=str(row["scope"]),
+                watermark_time=row["watermark_time"],
+            )
+            for row in rows
+        ]
 
     def set_watermark(
         self, dataset: str, *, scope: str = "", watermark_time: datetime
